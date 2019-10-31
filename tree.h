@@ -25,5 +25,8 @@ typedef struct tree_node_t
 
 /* function prototypes */
 int check_tree(tree_node root);
+void insert(tree_node *root, int value);
+void remove(tree_node *root, int value);
+void search(tree_node *root, int value);
 
 #endif

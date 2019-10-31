@@ -5,11 +5,11 @@
 /**
  * check tree with BFS
  */
-int check_tree(tree_node root)
+int check_tree(tree_node *root)
 {
     // rule 1,3 inherently holds
     // rule 2
-    if (root.color != BLACK)
+    if (root->color != BLACK)
     {
         fprintf(stderr, "[ERROR] tree root with non-black color\n");
         return 1;
@@ -17,7 +17,7 @@ int check_tree(tree_node root)
     
     std::vector<tree_node> frontier;
     frontier.clear();
-    frontier.push_back(root);
+    frontier.push_back(*root);
 
     while (frontier.size() > 0)
     {
@@ -102,4 +102,19 @@ int check_tree(tree_node root)
     }
 
     return 0;
+}
+
+void insert(tree_node *root, int value)
+{
+    // TODO
+}
+
+void remove(tree_node *root, int value)
+{
+    // TODO
+}
+
+void search(tree_node *root, int value)
+{
+    // TODO
 }
