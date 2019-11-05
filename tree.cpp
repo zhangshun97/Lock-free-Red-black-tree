@@ -1,6 +1,7 @@
 #include "tree.h"
 
 #include<vector>
+#include<stdlib.h>
 
 /**
  * check tree with BFS
@@ -104,8 +105,74 @@ int check_tree(tree_node *root)
     return 0;
 }
 
+void left_rotate(tree_node *node)
+{
+    if (!node)
+    {
+        fprintf(stderr, "[ERROR] invalid rotate on NULL node.\n");
+        return;
+    }
+    
+    if (!node->right_child)
+    {
+        fprintf(stderr, 
+                "[ERROR] invalid rotate on node with NULL right child.\n");
+        return;
+    }
+
+    tree_node *right_child = node->right_child;
+    right_child->parent = node->parent;
+    node->parent = right_child;
+
+    node->right_child = right_child->left_child;
+    right_child->left_child = node;
+
+    if (node->right_child)
+    {
+        node->right_child->parent = node;
+    }
+    
+    dbg_printf("Left rotation complete.\n");
+}
+
+void right_rotate(tree_node *node)
+{
+    if (!node)
+    {
+        fprintf(stderr, "[ERROR] invalid rotate on NULL node.\n");
+        return;
+    }
+
+    if (!node->left_child)
+    {
+        fprintf(stderr,
+                "[ERROR] invalid rotate on node with NULL left child.\n");
+        return;
+    }
+
+    tree_node *left_child = node->left_child;
+    left_child->parent = node->parent;
+    node->parent = left_child;
+
+    node->left_child = left_child->right_child;
+    left_child->right_child = node;
+
+    if (node->left_child)
+    {
+        node->left_child->parent = node;
+    }
+
+    dbg_printf("Right rotation complete.\n");
+}
+
 void insert(tree_node *root, int value)
 {
+    // create new node
+    tree_node *new_node;
+    new_node = (tree_node*)malloc(sizeof(tree_node));
+    new_node->color = RED;
+    new_node->value = value;
+
     // TODO
 }
 
