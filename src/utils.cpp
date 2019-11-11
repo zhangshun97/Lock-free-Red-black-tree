@@ -21,25 +21,25 @@ bool check_tree(tree_node *root)
         return false;
     }
 
-    std::vector<tree_node> frontier;
+    std::vector<tree_node*> frontier;
     frontier.clear();
-    frontier.push_back(*root);
+    frontier.push_back(root);
 
     while (frontier.size() > 0)
     {
-        tree_node cur_node = frontier.back();
-        tree_node *left_child = cur_node.left_child;
-        tree_node *right_child = cur_node.right_child;
+        tree_node *cur_node = frontier.back();
+        tree_node *left_child = cur_node->left_child;
+        tree_node *right_child = cur_node->right_child;
 
         // rule 4
-        if (cur_node.color == RED)
+        if (cur_node->color == RED)
         {
-            if (!left_child->is_leaf && left_child->color == RED)
+            if (left_child->color == RED)
             {
                 fprintf(stderr, "[ERROR] red node's child must be black.\n");
                 return false;
             }
-            if (!right_child->is_leaf && right_child->color == RED)
+            if (right_child->color == RED)
             {
                 fprintf(stderr, "[ERROR] red node's child must be black.\n");
                 return false;
@@ -47,7 +47,7 @@ bool check_tree(tree_node *root)
         }
 
         // rule 5
-        if (cur_node.color == BLACK)
+        if (cur_node->color == BLACK)
         {
             if (!left_child->is_leaf && !right_child->is_leaf)
             {
@@ -97,13 +97,13 @@ bool check_tree(tree_node *root)
         }
 
         frontier.pop_back();
-        if (left_child)
+        if (!left_child->is_leaf)
         {
-            frontier.push_back(*left_child);
+            frontier.push_back(left_child);
         }
-        if (right_child)
+        if (!right_child->is_leaf)
         {
-            frontier.push_back(*right_child);
+            frontier.push_back(right_child);
         }
     }
 
