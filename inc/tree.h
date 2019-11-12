@@ -26,6 +26,8 @@ typedef struct tree_node_t
 /* function prototypes */
 /* main functions */
 tree_node *rb_init(void);
+void right_rotate(tree_node *root, tree_node *node);
+void left_rotate(tree_node *root, tree_node *node);
 void tree_insert(tree_node *root, tree_node *node);
 void rb_insert(tree_node *root, int value);
 tree_node *get_remove_ndoe(tree_node *node);
@@ -34,6 +36,7 @@ void rb_remove_fixup(tree_node *root, tree_node *node);
 tree_node *tree_search(tree_node *root, int value);
 
 /* utility functions  */
+void show_tree(tree_node *root);
 bool check_tree(tree_node *root);
 bool is_root(tree_node *node);
 bool is_left(tree_node *node);

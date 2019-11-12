@@ -21,23 +21,36 @@ tree_node *rb_init(void)
 /**
  * perform red-black left rotation
  */
-void left_rotate(tree_node *node)
+void left_rotate(tree_node *root, tree_node *node)
 {
     if (node->is_leaf)
     {
         fprintf(stderr, "[ERROR] invalid rotate on NULL node.\n");
-        return;
+        exit(1);
     }
     
     if (node->right_child->is_leaf)
     {
         fprintf(stderr, 
                 "[ERROR] invalid rotate on node with NULL right child.\n");
-        return;
+        exit(1);
     }
 
     tree_node *right_child = node->right_child;
     right_child->parent = node->parent;
+    if (is_root(node))
+    {
+        root->left_child = right_child;
+    }
+    else if (is_left(node))
+    {
+        node->parent->left_child = right_child;
+    }
+    else
+    {
+        node->parent->right_child = right_child;
+    }
+
     node->parent = right_child;
 
     node->right_child = right_child->left_child;
@@ -54,23 +67,36 @@ void left_rotate(tree_node *node)
 /**
  * perform red-black right rotation
  */
-void right_rotate(tree_node *node)
+void right_rotate(tree_node *root, tree_node *node)
 {
     if (node->is_leaf)
     {
         fprintf(stderr, "[ERROR] invalid rotate on NULL node.\n");
-        return;
+        exit(1);
     }
 
     if (node->left_child->is_leaf)
     {
         fprintf(stderr,
                 "[ERROR] invalid rotate on node with NULL left child.\n");
-        return;
+        exit(1);
     }
 
     tree_node *left_child = node->left_child;
     left_child->parent = node->parent;
+    if (is_root(node))
+    {
+        root->left_child = left_child;
+    }
+    else if (is_left(node))
+    {
+        node->parent->left_child = left_child;
+    }
+    else
+    {
+        node->parent->right_child = left_child;
+    }
+    
     node->parent = left_child;
 
     node->left_child = left_child->right_child;
@@ -102,14 +128,17 @@ void tree_insert(tree_node *root, tree_node *new_node)
     
     // insert like any binary search tree
     tree_node *curr_node = root->left_child;
-    while (curr_node)
+    while (!curr_node->is_leaf)
     {
         if (value > curr_node->value) /* go right */
         {
             if (curr_node->right_child->is_leaf)
             {
+                free_node(curr_node->right_child);
                 curr_node->right_child = new_node;
-                break;
+                new_node->parent = curr_node;
+                dbg_printf("[Insert] new node with value (%d)\n", value);
+                return;
             }
             
             curr_node = curr_node->right_child;
@@ -118,15 +147,18 @@ void tree_insert(tree_node *root, tree_node *new_node)
         {
             if (curr_node->left_child->is_leaf)
             {
+                free_node(curr_node->left_child);
                 curr_node->left_child = new_node;
-                break;
+                new_node->parent = curr_node;
+                dbg_printf("[Insert] new node with value (%d)\n", value);
+                return;
             }
 
             curr_node = curr_node->left_child;
         }
     }
 
-    dbg_printf("[Insert] new node with value (%d)\n", value);
+    dbg_printf("[Insert] failed\n");
 }
 
 /**
@@ -159,7 +191,7 @@ void rb_insert(tree_node *root, int value)
         
         parent = curr_node->parent;
 
-        if (is_root(parent)) // trivial case 2
+        if (parent->color == BLACK) // trivial case 2
         {
             break;
         }
@@ -181,7 +213,7 @@ void rb_insert(tree_node *root, int value)
             switch (is_left(curr_node))
             {
             case false:
-                left_rotate(parent);
+                left_rotate(root, parent);
                 curr_node = parent;
             case true:
                 parent = curr_node->parent;
@@ -189,16 +221,17 @@ void rb_insert(tree_node *root, int value)
 
                 parent->parent->color = RED;
                 parent->color = BLACK;
-                right_rotate(parent->parent);
+                right_rotate(root, parent->parent);
                 break;
             }
+            break;
         }
         else // parent is the right child of its parent
         {
             switch (is_left(curr_node))
             {
             case true:
-                right_rotate(parent);
+                right_rotate(root, parent);
                 curr_node = parent;
             case false:
                 parent = curr_node->parent;
@@ -206,9 +239,10 @@ void rb_insert(tree_node *root, int value)
 
                 parent->parent->color = RED;
                 parent->color = BLACK;
-                left_rotate(parent->parent);
+                left_rotate(root, parent->parent);
                 break;
             }
+            break;
         }
     }
     
@@ -281,7 +315,7 @@ void rb_remove_fixup(tree_node *root, tree_node *node)
             {
                 brother_node->color = BLACK;
                 node->parent->color = RED;
-                left_rotate(node->parent);
+                left_rotate(root, node->parent);
                 brother_node = node->parent->right_child;
             }
 
@@ -295,13 +329,13 @@ void rb_remove_fixup(tree_node *root, tree_node *node)
             {
                 brother_node->left_child->color = BLACK;
                 brother_node->color = RED;
-                right_rotate(brother_node);
+                right_rotate(root, brother_node);
                 brother_node = node->parent->right_child;
 
                 brother_node->color = node->parent->color;
                 node->parent->color = BLACK;
                 brother_node->right_child->color = BLACK;
-                left_rotate(node->parent);
+                left_rotate(root, node->parent);
                 break;
             }
         }
@@ -312,7 +346,7 @@ void rb_remove_fixup(tree_node *root, tree_node *node)
             {
                 brother_node->color = BLACK;
                 node->parent->color = RED;
-                right_rotate(node->parent);
+                right_rotate(root, node->parent);
                 brother_node = node->parent->left_child;
             }
 
@@ -326,13 +360,13 @@ void rb_remove_fixup(tree_node *root, tree_node *node)
             {
                 brother_node->right_child->color = BLACK;
                 brother_node->color = RED;
-                left_rotate(brother_node);
+                left_rotate(root, brother_node);
                 brother_node = node->parent->left_child;
 
                 brother_node->color = node->parent->color;
                 node->parent->color = BLACK;
                 brother_node->left_child->color = BLACK;
-                right_rotate(node->parent);
+                right_rotate(root, node->parent);
                 break;
             }
         }

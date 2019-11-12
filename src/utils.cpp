@@ -8,6 +8,52 @@
  ******************/
 
 /**
+ * show tree
+ * only used for debug
+ * because only small tree can be shown
+ */
+void show_tree(tree_node *root)
+{
+    tree_node *root_node = root->left_child;
+    std::vector<tree_node *> frontier;
+    frontier.clear();
+    frontier.push_back(root_node);
+
+    while (frontier.size() > 0)
+    {
+        tree_node *cur_node = frontier.back();
+        tree_node *left_child = cur_node->left_child;
+        tree_node *right_child = cur_node->right_child;
+
+        dbg_printf("node with value (%d) color [%d]\n",
+                   cur_node->value, cur_node->color);
+
+        frontier.pop_back();
+        if (left_child->is_leaf)
+        {
+            dbg_printf("    left child null\n");
+        }
+        else
+        {
+            dbg_printf("    left child with value (%d) color [%d]\n",
+                       left_child->value, left_child->color);
+            frontier.push_back(left_child);
+        }
+
+        if (right_child->is_leaf)
+        {
+            dbg_printf("    right child null\n");
+        }
+        else
+        {
+            dbg_printf("    right child with value (%d) color [%d]\n",
+                       right_child->value, right_child->color);
+            frontier.push_back(right_child);
+        }
+    }
+}
+
+/**
  * check tree with BFS
  */
 bool check_tree(tree_node *root)
@@ -262,7 +308,7 @@ tree_node *get_right_min(tree_node *node)
     }
 
     tree_node *curr_node = node->right_child;
-    while (curr_node->left_child)
+    while (!curr_node->left_child->is_leaf)
     {
         curr_node = curr_node->left_child;
     }
