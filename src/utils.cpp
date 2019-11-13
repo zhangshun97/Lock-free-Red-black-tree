@@ -163,7 +163,111 @@ bool check_tree(tree_node *root)
 }
 
 /**
- * true if node is the left child of its parent node
+ * check_tree_dfs_util: return the height of current node. 
+ *      compute heights of two sub-trees first.
+ *      also determine if rule 4 is violated between this node and its children.
+ *      return 0 if rule 4 or 5 is violated.
+ */
+int check_tree_dfs_util(tree_node *node)
+{
+    // no more check for leaf node
+    if (node->is_leaf)
+    {
+        return 1;
+    }
+
+    // check value
+    if (!node->left_child->is_leaf && node->left_child->value > node->value)
+    {
+        dbg_printf("[ERROR] left child's value is larger than parent's.\n");
+        return 0;
+    }
+    if (!node->right_child->is_leaf && node->right_child->value < node->value)
+    {
+        dbg_printf("[ERROR] right child's value is smaller than parent's.\n");
+        return 0;
+    }
+
+    // check rule 4
+    if (node->color == RED)
+    {
+        if (!node->left_child->is_leaf && node->left_child->color == RED)
+        {
+            dbg_printf("[ERROR] rule 4 is violated.\n");
+            return 0;
+        }
+
+        if (!node->right_child->is_leaf && node->right_child->color == RED)
+        {
+            dbg_printf("[ERROR] rule 4 is violated.\n");
+            return 0;
+        }
+    }
+
+    // check rule 4 and 5 recursively
+    int left_height = check_tree_dfs_util(node->left_child);
+    int right_height = check_tree_dfs_util(node->right_child);
+
+    // error happens in sub-tree
+    if (left_height == 0 || right_height == 0)
+    {
+        return 0;
+    }
+
+    // error happens in current node
+    if (left_height != right_height)
+    {
+        dbg_printf("[ERROR] rule 5 is violated.\n");
+        return 0;
+    }
+
+    return left_height + 1;
+}
+
+/**
+ * check_tree_dfs: check if the tree is a red-black tree. 
+ *      compute heights of two sub-trees first.
+ *      also determine if rule 4 is violated between this node and its children.
+ *      return 0 if rule 4 or 5 is violated.
+ */
+bool check_tree_dfs(tree_node *root)
+{
+    // check if root is black first
+    if (root->color != BLACK)
+    {
+        dbg_printf("[ERROR] tree root with non-black color\n");
+        return false;
+    }
+
+    // no need to check children's color
+
+    // check value
+    if (!root->left_child->is_leaf && root->left_child->value > root->value)
+    {
+        dbg_printf("[ERROR] left child's value is larger than root.\n");
+        return false;
+    }
+    if (!root->right_child->is_leaf && root->right_child->value < root->value)
+    {
+        dbg_printf("[ERROR] right child's value is smaller than root.\n");
+        return false;
+    }
+
+    // check rule 5
+    int left_height = check_tree_dfs_util(root->left_child);
+    int right_height = check_tree_dfs_util(root->right_child);
+
+    if (left_height == 0 || right_height == 0 || left_height != right_height)
+    {
+        dbg_printf("[ERROR] rule 4 or 5 is violated in left sub-tree\n");
+        return false;
+    }
+
+    return true;
+}
+
+/**
+ * true if node is the root node, aka has a null parent
  */
 bool is_root(tree_node *node)
 {
@@ -178,7 +282,7 @@ bool is_root(tree_node *node)
 }
 
 /**
- * true if node is the left child of its parent node
+ * create a leaf node, aka null node
  */
 tree_node* create_leaf_node(void)
 {

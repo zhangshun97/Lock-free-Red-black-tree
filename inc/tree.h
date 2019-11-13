@@ -5,7 +5,7 @@
 
 #define DEBUG
 #ifdef DEBUG
-#define dbg_printf(...) printf(__VA_ARGS__)
+#define dbg_printf(fmt, ...) printf("%s line:%d %s():" fmt, __FILE__, __LINE__, __func__, ##__VA_ARGS__)
 #else
 #define dbg_printf(...)
 #endif
@@ -38,6 +38,8 @@ tree_node *tree_search(tree_node *root, int value);
 /* utility functions  */
 void show_tree(tree_node *root);
 bool check_tree(tree_node *root);
+bool check_tree_dfs(tree_node *root);
+
 bool is_root(tree_node *node);
 bool is_left(tree_node *node);
 
