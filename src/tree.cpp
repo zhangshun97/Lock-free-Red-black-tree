@@ -287,14 +287,21 @@ void rb_remove(tree_node *root, int value)
     tree_node *node = tree_search(root, value);
     tree_node *delete_node, *replace_node;
     delete_node = get_remove_ndoe(node);
-    dbg_printf("[Remove] node to delete with value %d.\n", delete_node->value);
+    dbg_printf("[Remove] node to delete with value %d.\n", value);
     replace_node = replace_parent(root, delete_node);
 
     if (delete_node->color == BLACK) /* fixup case */
     {
-        rb_remove_fixup(root, replace_node);
+        if (replace_node->color == RED)
+        {
+            replace_node->color = BLACK;
+        }
+        else
+        {
+            rb_remove_fixup(root, replace_node);
+        }
     }
-    dbg_printf("[Remove] node with value %d complete.\n", delete_node->value);
+    dbg_printf("[Remove] node with value %d complete.\n", value);
     free_node(delete_node);
 }
 
@@ -311,27 +318,36 @@ void rb_remove_fixup(tree_node *root, tree_node *node)
         if (is_left(node))
         {
             brother_node = node->parent->right_child;
-            if (brother_node->color == RED)
+            if (brother_node->color == RED) // case 1
             {
                 brother_node->color = BLACK;
                 node->parent->color = RED;
                 left_rotate(root, node->parent);
-                brother_node = node->parent->right_child;
-            }
+                brother_node = node->parent->right_child; // must be black node
+            } // case 1 will definitely turn into case 2
 
-            else if (brother_node->left_child->color == BLACK &&
-                brother_node->right_child->color == BLACK)
+            if (brother_node->left_child->color == BLACK &&
+                brother_node->right_child->color == BLACK) // case 2
             {
                 brother_node->color = RED;
                 node = node->parent;
+                if (node->color == RED)
+                {
+                    node->color = BLACK;
+                    break;
+                }
             }
-            else if (brother_node->right_child->color == BLACK)
+            
+            else if (brother_node->right_child->color == BLACK) // case 3
             {
                 brother_node->left_child->color = BLACK;
                 brother_node->color = RED;
                 right_rotate(root, brother_node);
                 brother_node = node->parent->right_child;
+            }
 
+            else // case 4
+            {
                 brother_node->color = node->parent->color;
                 node->parent->color = BLACK;
                 brother_node->right_child->color = BLACK;
@@ -339,7 +355,7 @@ void rb_remove_fixup(tree_node *root, tree_node *node)
                 break;
             }
         }
-        else
+        else // mirror case of the above
         {
             brother_node = node->parent->left_child;
             if (brother_node->color == RED)
@@ -350,19 +366,28 @@ void rb_remove_fixup(tree_node *root, tree_node *node)
                 brother_node = node->parent->left_child;
             }
 
-            else if (brother_node->left_child->color == BLACK &&
+            if (brother_node->left_child->color == BLACK &&
                      brother_node->right_child->color == BLACK)
             {
                 brother_node->color = RED;
                 node = node->parent;
+                if (node->color == RED)
+                {
+                    node->color = BLACK;
+                    break;
+                }
             }
+
             else if (brother_node->left_child->color == BLACK)
             {
                 brother_node->right_child->color = BLACK;
                 brother_node->color = RED;
                 left_rotate(root, brother_node);
                 brother_node = node->parent->left_child;
+            }
 
+            else // case 4
+            {
                 brother_node->color = node->parent->color;
                 node->parent->color = BLACK;
                 brother_node->left_child->color = BLACK;
@@ -371,6 +396,7 @@ void rb_remove_fixup(tree_node *root, tree_node *node)
             }
         }
     }
+    dbg_printf("[Remove] fixup complete.\n");
 }
 
 /**

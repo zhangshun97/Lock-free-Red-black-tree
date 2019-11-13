@@ -25,29 +25,35 @@ void show_tree(tree_node *root)
         tree_node *left_child = cur_node->left_child;
         tree_node *right_child = cur_node->right_child;
 
-        dbg_printf("node with value (%d) color [%d]\n",
-                   cur_node->value, cur_node->color);
+        if (cur_node->color == BLACK)
+            dbg_printf("(%d) Black\n", cur_node->value);
+        else
+            dbg_printf("(%d) Red\n", cur_node->value);
 
         frontier.pop_back();
         if (left_child->is_leaf)
         {
-            dbg_printf("    left child null\n");
+            dbg_printf("    left null\n");
         }
         else
         {
-            dbg_printf("    left child with value (%d) color [%d]\n",
-                       left_child->value, left_child->color);
+            if (left_child->color == BLACK)
+                dbg_printf("    (%d) Black\n", left_child->value);
+            else
+                dbg_printf("    (%d) Red\n", left_child->value);
             frontier.push_back(left_child);
         }
 
         if (right_child->is_leaf)
         {
-            dbg_printf("    right child null\n");
+            dbg_printf("    right null\n");
         }
         else
         {
-            dbg_printf("    right child with value (%d) color [%d]\n",
-                       right_child->value, right_child->color);
+            if (right_child->color == BLACK)
+                dbg_printf("    (%d) Black\n", right_child->value);
+            else
+                dbg_printf("    (%d) Red\n", right_child->value);
             frontier.push_back(right_child);
         }
     }
@@ -191,12 +197,6 @@ tree_node* create_leaf_node(void)
  */
 tree_node *replace_parent(tree_node *root, tree_node *node)
 {
-    if (get_num_null(node) != 1)
-    {
-        fprintf(stderr, "[ERROR] replace parent error non-null child.\n");
-        return NULL;
-    }
-
     tree_node *child;
     if (node->left_child->is_leaf)
     {
