@@ -7,6 +7,8 @@
  * helper function
  ******************/
 
+
+
 /**
  * show tree
  * only used for debug
@@ -24,6 +26,8 @@ void show_tree(tree_node *root)
         tree_node *cur_node = frontier.back();
         tree_node *left_child = cur_node->left_child;
         tree_node *right_child = cur_node->right_child;
+
+        dbg_printf("pointer: %lu ", (unsigned long) cur_node);
 
         if (cur_node->color == BLACK)
             dbg_printf("(%d) Black\n", cur_node->value);

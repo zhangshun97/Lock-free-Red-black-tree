@@ -2,6 +2,8 @@
 #define RED_BLACK_TREE_H
 
 #include <stdio.h>
+#include <vector>
+#include <atomic>
 
 #define DEBUG
 #ifdef DEBUG
@@ -9,6 +11,10 @@
 #else
 #define dbg_printf(...)
 #endif
+
+using namespace std;
+
+
 
 typedef struct tree_node_t
 {
@@ -18,6 +24,7 @@ typedef struct tree_node_t
     int value;
     char color; // RED or BLACK
     bool is_leaf;
+    atomic<bool> flag;
 } tree_node;
 
 #define RED 0
@@ -52,4 +59,17 @@ tree_node *replace_parent(tree_node *root, tree_node *node);
 
 void free_node(tree_node *node);
 
+/* lock-free functions */
+bool setup_local_area_for_insert(tree_node *x);
+tree_node *move_inserter_up(tree_node *oldx, vector<tree_node *> local_area);
+
+inline void print_get(tree_node *x)
+{
+    dbg_printf("[FLAG] get flag of %lu\n", (unsigned long)x);
+}
+
+inline void print_release(tree_node *x)
+{
+    dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)x);
+}
 #endif

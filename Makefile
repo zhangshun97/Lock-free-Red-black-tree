@@ -3,7 +3,7 @@ INC_DIR = $(TOP_DIR)/inc
 SRC_DIR = $(TOP_DIR)/src
 BUILD_DIR = $(TOP_DIR)/build
 CC=g++
-FLAGS = -pthread -fPIC -g -ggdb -Wall -I$(INC_DIR)
+FLAGS = -pthread -fPIC -g -ggdb -Wall -I$(INC_DIR) -std=c++11
 OBJS = $(BUILD_DIR)/tree.o \
 	$(BUILD_DIR)/utils.o
 

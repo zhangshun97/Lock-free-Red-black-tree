@@ -2,6 +2,8 @@
 
 #include <stdlib.h>
 
+bool expected = false;
+
 /**
  * initialize red-black tree and return its root
  */
@@ -10,7 +12,7 @@ tree_node *rb_init(void)
     tree_node *root;
     root = (tree_node *)malloc(sizeof(tree_node));
     root->color = BLACK;
-    root->value = 0;
+    root->value = INT32_MAX;
     root->left_child = create_leaf_node();
     root->right_child = create_leaf_node();
     root->is_leaf = false;
@@ -118,47 +120,100 @@ void tree_insert(tree_node *root, tree_node *new_node)
 {
     int value = new_node->value;
 
-    if (root->left_child->is_leaf)
-    {
-        free_node(root->left_child);
-        root->left_child = new_node;
-        dbg_printf("[Insert] new node with value (%d)\n", value);
-        return;
-    }
+    // if (root->left_child->is_leaf)
+    // {
+    //     free_node(root->left_child);
+    //     root->left_child = new_node;
+    //     dbg_printf("[Insert] new node with value (%d)\n", value);
+    //     return;
+    // }
+
+    restart:
     
     // insert like any binary search tree
-    tree_node *curr_node = root->left_child;
+    tree_node *z = root->parent;
+    while (!root->flag.compare_exchange_strong(expected, true));
+
+    dbg_printf("[FLAG] get flag of %lu\n", (unsigned long)root);
+
+    tree_node *curr_node = root;
     while (!curr_node->is_leaf)
     {
+        z = curr_node;
         if (value > curr_node->value) /* go right */
         {
-            if (curr_node->right_child->is_leaf)
-            {
-                free_node(curr_node->right_child);
-                curr_node->right_child = new_node;
-                new_node->parent = curr_node;
-                dbg_printf("[Insert] new node with value (%d)\n", value);
-                return;
-            }
+            // if (curr_node->right_child->is_leaf)
+            // {
+            //     free_node(curr_node->right_child);
+            //     curr_node->right_child = new_node;
+            //     new_node->parent = curr_node;
+            //     dbg_printf("[Insert] new node with value (%d)\n", value);
+            //     return;
+            // }
             
             curr_node = curr_node->right_child;
         }
         else /* go left */
         {
-            if (curr_node->left_child->is_leaf)
-            {
-                free_node(curr_node->left_child);
-                curr_node->left_child = new_node;
-                new_node->parent = curr_node;
-                dbg_printf("[Insert] new node with value (%d)\n", value);
-                return;
-            }
+            // if (curr_node->left_child->is_leaf)
+            // {
+            //     free_node(curr_node->left_child);
+            //     curr_node->left_child = new_node;
+            //     new_node->parent = curr_node;
+            //     dbg_printf("[Insert] new node with value (%d)\n", value);
+            //     return;
+            // }
 
             curr_node = curr_node->left_child;
         }
+        if (!curr_node->flag.compare_exchange_strong(expected, true))
+        {
+            z->flag = false;// release z's flag
+            dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)z);
+            goto restart;
+        }
+
+        dbg_printf("[FLAG] get flag of %lu\n", (unsigned long)curr_node);
+
+        if (!curr_node->is_leaf)
+        {
+            // release old curr_node's flag
+            z->flag = false;
+            dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)z);
+        }
+    }
+    
+    new_node->flag = true;
+    if (!setup_local_area_for_insert(z))
+    {
+        z->flag = false;
+        dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)z);
+        goto restart;
     }
 
-    dbg_printf("[Insert] failed\n");
+    // now the local area has been setup
+    // insert the node
+    new_node->parent = z;
+    if (z == root)
+    {
+        free(root->left_child);
+        root->left_child = new_node;
+        new_node->parent = NULL;
+    }
+    else if (value < z->value)
+    {
+        free(z->left_child);
+        z->left_child = new_node;
+    }
+    else if (value > z->value)
+    {
+        free(z->right_child);
+        z->right_child = new_node;
+    }
+    
+    dbg_printf("[Insert] new node with value (%d)\n", value);
+
+    // dbg_printf("[Insert] failed\n");
 }
 
 /**
@@ -179,7 +234,45 @@ void rb_insert(tree_node *root, int value)
     tree_insert(root, new_node); // normal insert
 
     tree_node *curr_node = new_node;
-    tree_node *parent, *uncle;
+    
+    tree_node *parent, *uncle = NULL, *grandparent = NULL;
+
+    parent = curr_node->parent;
+    vector<tree_node *> local_area = {curr_node, parent};
+
+    if (parent != NULL)
+    {
+        grandparent = parent->parent; 
+    }
+
+    if (grandparent != NULL)
+    {
+        if (grandparent->left_child == parent)
+        {
+            uncle = grandparent->right_child;
+        }
+        else
+        {
+            uncle = grandparent->left_child;
+        }
+    }
+
+    local_area.push_back(uncle);
+    local_area.push_back(grandparent);
+
+    if (is_root(curr_node))
+    {
+        curr_node->color = BLACK;
+        for (auto node:local_area)
+        {
+            if (node != NULL) 
+            {
+                node->flag = false;
+            }
+        }
+        dbg_printf("[INSERT] insertFixup complete.\n");
+        return;
+    }
 
     while (true)
     {
@@ -202,9 +295,10 @@ void rb_insert(tree_node *root, int value)
         {
             parent->color = BLACK;
             uncle->color = BLACK;
-            curr_node = parent->parent;
-            curr_node->color = RED;
+            // curr_node = parent->parent;
+            parent->parent->color = RED;
 
+            curr_node = move_inserter_up(curr_node, local_area);
             continue;
         }
 
@@ -245,8 +339,128 @@ void rb_insert(tree_node *root, int value)
             break;
         }
     }
+
+    // release flags of all nodes in local_area
+    for (auto node : local_area)
+    {
+        if (node != NULL)
+        {
+            node->flag = false;
+            dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)node);
+        }
+    }
     
     dbg_printf("[Insert] rb fixup complete.\n");
+}
+
+bool setup_local_area_for_insert(tree_node *x) {
+    tree_node *parent = x->parent;
+    tree_node *uncle = NULL;
+
+    if (parent == NULL) return true;
+
+    // if (!x->flag.compare_exchange_strong(expected, true))
+    // {
+    //     return false;
+    // }
+
+    // print_get(x);
+
+    if (!parent->flag.compare_exchange_strong(expected, true))
+    {
+        return false;
+    }
+
+    dbg_printf("[FLAG] get flag of %lu\n", (unsigned long)parent);
+    
+    // fail when parent of x changes
+    if (parent != x->parent)
+    {
+        parent->flag = false;
+        dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)parent);
+        return false;
+    }
+
+    if (x == x->parent->left_child)
+    {
+        uncle = x->parent->right_child;
+    }
+    else
+    {
+        uncle = x->left_child;
+    }
+
+    if (!uncle->flag.compare_exchange_strong(expected, true))
+    {
+        x->parent->flag = false;
+        dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)x->parent);
+        return false;
+    }
+
+    dbg_printf("[FLAG] get flag of %lu\n", (unsigned long)uncle);
+
+    // now the process has the flags of x, x's parent and x's uncle
+    return true;
+}
+
+tree_node *move_inserter_up(tree_node *oldx, vector<tree_node *> local_area)
+{
+    tree_node *oldp = oldx->parent;
+    tree_node *oldgp = oldp->parent;
+    // tree_node *uncle = NULL;
+    // if (oldp == oldgp->left_child)
+    // {
+    //     uncle = oldgp->right_child;
+    // }
+    // else
+    // {
+    //     uncle = oldgp->left_child;
+    // }
+
+    tree_node *newx, *newp = NULL, *newgp = NULL, *newuncle = NULL;
+    newx = oldgp;
+    while(true && newx->parent != NULL)
+    {
+        newp = newx->parent;
+        if (!newp->flag.compare_exchange_strong(expected, true))
+        {
+            continue;
+        }
+
+        newgp = newp->parent;
+        if (newgp == NULL) break;
+        if (!newgp->flag.compare_exchange_strong(expected, true))
+        {
+            newp->flag = false;
+            continue;
+        }
+
+        if (newp == newgp->left_child)
+        {
+            newuncle = newgp->right_child;
+        }
+        else
+        {
+            newuncle = newgp->left_child;
+        }
+
+        if (!newuncle->flag.compare_exchange_strong(expected, true))
+        {
+            newgp->flag = false;
+            newp->flag = false;
+            continue;
+        }
+
+        // now the process has the flags of newp, newgp and newuncle
+        break;
+    }
+
+    local_area.push_back(newx);
+    local_area.push_back(newp);
+    local_area.push_back(newgp);
+    local_area.push_back(newuncle);
+
+    return newx;
 }
 
 /**
