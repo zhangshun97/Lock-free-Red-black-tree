@@ -9,13 +9,13 @@ int main(int argc, char const *argv[])
     tree_node *root = rb_init();
 
     rb_insert(root, 3);
-    show_tree(root);
     rb_insert(root, 5);
     rb_insert(root, 15);
-    // rb_insert(root, 1);
-    // rb_insert(root, 2);
-    // rb_insert(root, 7);
-    // rb_insert(root, 50);
+    rb_insert(root, 1);
+    rb_insert(root, 2);
+    // show_tree(root);
+    rb_insert(root, 7);
+    rb_insert(root, 6);
     show_tree(root);
     // rb_remove(root, 2);
     // show_tree(root);

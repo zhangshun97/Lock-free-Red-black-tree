@@ -120,23 +120,34 @@ void tree_insert(tree_node *root, tree_node *new_node)
 {
     int value = new_node->value;
 
-    // if (root->left_child->is_leaf)
-    // {
-    //     free_node(root->left_child);
-    //     root->left_child = new_node;
-    //     dbg_printf("[Insert] new node with value (%d)\n", value);
-    //     return;
-    // }
-
-    restart:
-    
     // insert like any binary search tree
-    tree_node *z = root->parent;
     while (!root->flag.compare_exchange_strong(expected, true));
 
     dbg_printf("[FLAG] get flag of %lu\n", (unsigned long)root);
 
-    tree_node *curr_node = root;
+    // empty tree
+    if (root->left_child->is_leaf)
+    {
+        free_node(root->left_child);
+        root->left_child = new_node;
+        dbg_printf("[Insert] new node with value (%d)\n", value);
+        root->flag = false;
+        dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)root);
+        return;
+    }
+
+    // release root's flag for non-empty tree
+    root->flag = false;
+    dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)root);
+
+    restart:
+
+    tree_node *z = NULL;
+    tree_node *curr_node = root->left_child;
+    while (!curr_node->flag.compare_exchange_strong(expected, true));
+    dbg_printf("[FLAG] get flag of %lu\n", (unsigned long)curr_node);
+
+    
     while (!curr_node->is_leaf)
     {
         z = curr_node;
@@ -168,8 +179,11 @@ void tree_insert(tree_node *root, tree_node *new_node)
         }
         if (!curr_node->flag.compare_exchange_strong(expected, true))
         {
+            dbg_printf("[FLAG] failed getting flag of %lu\n", (unsigned long)curr_node);
             z->flag = false;// release z's flag
             dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)z);
+            show_tree(root);
+            abort();
             goto restart;
         }
 
@@ -387,7 +401,7 @@ bool setup_local_area_for_insert(tree_node *x) {
     }
     else
     {
-        uncle = x->left_child;
+        uncle = x->parent->left_child;
     }
 
     if (!uncle->flag.compare_exchange_strong(expected, true))
