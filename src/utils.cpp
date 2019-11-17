@@ -299,6 +299,7 @@ tree_node* create_leaf_node(void)
     new_node->left_child = NULL;
     new_node->right_child = NULL;
     new_node->is_leaf = true;
+    new_node->flag = false;
     return new_node;
 }
 

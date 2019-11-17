@@ -2,12 +2,17 @@
 #define RED_BLACK_TREE_H
 
 #include <stdio.h>
+#include <pthread.h>
 #include <vector>
 #include <atomic>
 
-#define DEBUG
+// #define DEBUG
 #ifdef DEBUG
-#define dbg_printf(fmt, ...) printf("%s line:%d %s():" fmt, __FILE__, __LINE__, __func__, ##__VA_ARGS__)
+#define dbg_printf(fmt, ...) do {\
+        pthread_t         self;\
+        self = pthread_self();\
+        printf("tid:%u %s line:%d %s():" fmt, (unsigned)self, __FILE__, __LINE__, __func__, ##__VA_ARGS__);} while(0)
+
 #else
 #define dbg_printf(...)
 #endif
@@ -61,7 +66,7 @@ void free_node(tree_node *node);
 
 /* lock-free functions */
 bool setup_local_area_for_insert(tree_node *x);
-tree_node *move_inserter_up(tree_node *oldx, vector<tree_node *> local_area);
+tree_node *move_inserter_up(tree_node *oldx, vector<tree_node *> &local_area);
 
 inline void print_get(tree_node *x)
 {

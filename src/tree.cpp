@@ -2,7 +2,7 @@
 
 #include <stdlib.h>
 
-bool expected = false;
+// bool expected = false;
 
 /**
  * initialize red-black tree and return its root
@@ -17,6 +17,7 @@ tree_node *rb_init(void)
     root->right_child = create_leaf_node();
     root->is_leaf = false;
     root->parent = NULL;
+    root->flag = false;
     return root;
 }
 
@@ -121,7 +122,8 @@ void tree_insert(tree_node *root, tree_node *new_node)
     int value = new_node->value;
 
     // insert like any binary search tree
-    while (!root->flag.compare_exchange_strong(expected, true));
+    bool expected = false;
+    while (!root->flag.compare_exchange_weak(expected, true));
 
     dbg_printf("[FLAG] get flag of %lu\n", (unsigned long)root);
 
@@ -129,22 +131,30 @@ void tree_insert(tree_node *root, tree_node *new_node)
     if (root->left_child->is_leaf)
     {
         free_node(root->left_child);
+        new_node->flag = true;
+        dbg_printf("[FLAG] set flag of %lu\n", (unsigned long)new_node);
         root->left_child = new_node;
         dbg_printf("[Insert] new node with value (%d)\n", value);
-        root->flag = false;
         dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)root);
+        root->flag = false;
         return;
     }
 
     // release root's flag for non-empty tree
-    root->flag = false;
     dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)root);
+    root->flag = false;
 
     restart:
 
     tree_node *z = NULL;
     tree_node *curr_node = root->left_child;
-    while (!curr_node->flag.compare_exchange_strong(expected, true));
+    expected = false;
+    if (!curr_node->flag.compare_exchange_strong(expected, true))
+    {
+        dbg_printf("[FLAG] failed getting flag of %lu\n", (unsigned long)curr_node);
+        
+        goto restart;
+    }
     dbg_printf("[FLAG] get flag of %lu\n", (unsigned long)curr_node);
 
     
@@ -177,13 +187,14 @@ void tree_insert(tree_node *root, tree_node *new_node)
 
             curr_node = curr_node->left_child;
         }
-        if (!curr_node->flag.compare_exchange_strong(expected, true))
+
+        expected = false;
+        if (!curr_node->flag.compare_exchange_weak(expected, true))
         {
             dbg_printf("[FLAG] failed getting flag of %lu\n", (unsigned long)curr_node);
-            z->flag = false;// release z's flag
             dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)z);
-            show_tree(root);
-            abort();
+            z->flag = false;// release z's flag
+            
             goto restart;
         }
 
@@ -192,16 +203,17 @@ void tree_insert(tree_node *root, tree_node *new_node)
         if (!curr_node->is_leaf)
         {
             // release old curr_node's flag
-            z->flag = false;
             dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)z);
+            z->flag = false;
         }
     }
     
     new_node->flag = true;
     if (!setup_local_area_for_insert(z))
     {
+        curr_node->flag = false;
+        dbg_printf("[FLAG] release flag of %lu and %lu\n", (unsigned long)z, (unsigned long)curr_node);
         z->flag = false;
-        dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)z);
         goto restart;
     }
 
@@ -281,6 +293,7 @@ void rb_insert(tree_node *root, int value)
         {
             if (node != NULL) 
             {
+                dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)node);
                 node->flag = false;
             }
         }
@@ -359,8 +372,8 @@ void rb_insert(tree_node *root, int value)
     {
         if (node != NULL)
         {
-            node->flag = false;
             dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)node);
+            node->flag = false;
         }
     }
     
@@ -372,7 +385,7 @@ bool setup_local_area_for_insert(tree_node *x) {
     tree_node *uncle = NULL;
 
     if (parent == NULL) return true;
-
+    
     // if (!x->flag.compare_exchange_strong(expected, true))
     // {
     //     return false;
@@ -380,8 +393,10 @@ bool setup_local_area_for_insert(tree_node *x) {
 
     // print_get(x);
 
-    if (!parent->flag.compare_exchange_strong(expected, true))
+    bool expected = false;
+    if (!parent->flag.compare_exchange_weak(expected, true))
     {
+        dbg_printf("[FLAG] failed getting flag of %lu\n", (unsigned long)parent);
         return false;
     }
 
@@ -390,8 +405,9 @@ bool setup_local_area_for_insert(tree_node *x) {
     // fail when parent of x changes
     if (parent != x->parent)
     {
-        parent->flag = false;
+        dbg_printf("[FLAG] parent changed from %lu to %lu\n", (unsigned long)parent, (unsigned long)parent);
         dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)parent);
+        parent->flag = false;
         return false;
     }
 
@@ -404,10 +420,12 @@ bool setup_local_area_for_insert(tree_node *x) {
         uncle = x->parent->left_child;
     }
 
-    if (!uncle->flag.compare_exchange_strong(expected, true))
+    expected = false;
+    if (!uncle->flag.compare_exchange_weak(expected, true))
     {
-        x->parent->flag = false;
+        dbg_printf("[FLAG] failed getting flag of %lu\n", (unsigned long)uncle);
         dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)x->parent);
+        x->parent->flag = false;
         return false;
     }
 
@@ -417,7 +435,7 @@ bool setup_local_area_for_insert(tree_node *x) {
     return true;
 }
 
-tree_node *move_inserter_up(tree_node *oldx, vector<tree_node *> local_area)
+tree_node *move_inserter_up(tree_node *oldx, vector<tree_node *> &local_area)
 {
     tree_node *oldp = oldx->parent;
     tree_node *oldgp = oldp->parent;
@@ -431,23 +449,34 @@ tree_node *move_inserter_up(tree_node *oldx, vector<tree_node *> local_area)
     //     uncle = oldgp->left_child;
     // }
 
+    bool expected = false;
+
     tree_node *newx, *newp = NULL, *newgp = NULL, *newuncle = NULL;
     newx = oldgp;
     while(true && newx->parent != NULL)
     {
         newp = newx->parent;
-        if (!newp->flag.compare_exchange_strong(expected, true))
+        expected = false;
+        if (!newp->flag.compare_exchange_weak(expected, true))
         {
+            dbg_printf("[FLAG] failed getting flag of %lu\n", (unsigned long)newp);
             continue;
         }
 
+        dbg_printf("[FLAG] get flag of %lu\n", (unsigned long)newp);
+
         newgp = newp->parent;
         if (newgp == NULL) break;
-        if (!newgp->flag.compare_exchange_strong(expected, true))
+        expected = false;
+        if (!newgp->flag.compare_exchange_weak(expected, true))
         {
+            dbg_printf("[FLAG] failed getting flag of %lu\n", (unsigned long)newgp);
+            dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)newp);
             newp->flag = false;
             continue;
         }
+
+        dbg_printf("[FLAG] get flag of %lu\n", (unsigned long)newgp);
 
         if (newp == newgp->left_child)
         {
@@ -458,12 +487,18 @@ tree_node *move_inserter_up(tree_node *oldx, vector<tree_node *> local_area)
             newuncle = newgp->left_child;
         }
 
-        if (!newuncle->flag.compare_exchange_strong(expected, true))
+        expected = false;
+        if (!newuncle->flag.compare_exchange_weak(expected, true))
         {
+            dbg_printf("[FLAG] failed getting flag of %lu\n", (unsigned long)newuncle);
+            dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)newgp);
+            dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)newp);
             newgp->flag = false;
             newp->flag = false;
             continue;
         }
+
+        dbg_printf("[FLAG] get flag of %lu\n", (unsigned long)newuncle);
 
         // now the process has the flags of newp, newgp and newuncle
         break;
