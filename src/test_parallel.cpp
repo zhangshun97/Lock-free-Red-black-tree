@@ -38,8 +38,8 @@ int main()
     // run_multi_thread(8);
     // root = rb_init();
     // run_multi_thread(16);
-    // root = rb_init();
-    // run_multi_thread(32);
+    root = rb_init();
+    run_multi_thread(32);
     return 0;
 }
 
