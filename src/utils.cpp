@@ -302,7 +302,9 @@ tree_node* create_leaf_node(void)
 }
 
 /**
- * replace the parent node with its successor
+ * replace the node with its child
+ * this node has at most one non-nil child
+ * return this child after modifying the relation ship
  */
 tree_node *replace_parent(tree_node *root, tree_node *node)
 {

@@ -83,8 +83,18 @@ void free_node(tree_node *node);
 bool is_in(tree_node *target_node, move_up_struct *target_move_up_struct);
 bool is_goal(tree_node *target_node, move_up_struct *target_move_up_struct);
 pthread_mutex_t *move_up_lock_init(int num_processes);
+
+// insert related
 bool setup_local_area_for_insert(tree_node *x);
 tree_node *move_inserter_up(tree_node *oldx, vector<tree_node *> &local_area);
+
+// delete related
+bool setup_local_area_for_delete(tree_node *y, tree_node *z);
+bool apply_move_up_rule(tree_node *x, tree_node *w);
+tree_node *move_deleter_up(tree_node *oldx);
+tree_node *par_find(tree_node *root, int value);
+tree_node *par_find_successor(tree_node *delete_node);
+
 
 inline void print_get(tree_node *x)
 {

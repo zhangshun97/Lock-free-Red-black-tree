@@ -365,34 +365,47 @@ void rb_insert(tree_node *root, int value)
  */
 void rb_remove(tree_node *root, int value)
 {
-    tree_node *node;
-    do {
-        node = tree_search(root, value);
-    } while (!node->flag.compare_exchange_weak(false, true));
+restart:
+    tree_node *z = par_find(root, value);
+    tree_node *y; // actual delete node
+    if (z == NULL) return;
+
+    if (z->left_child->is_leaf || z->right_child->is_leaf)
+        y = z;
+    else
+        y = par_find_successor(z);
     
-    tree_node *delete_node, *replace_node;
-    do {
-    delete_node = get_remove_ndoe(node);
-    } while (!delete_node->flag.compare_exchange_weak(false, true));
     // we now hold the flag of y(delete_node) AND of z(node)
 
     // set up for local area delete
-
-    replace_node = replace_parent(root, delete_node);
-
-    if (delete_node->color == BLACK) /* fixup case */
+    if (!setup_local_area_for_delete(y, z))
     {
-        if (replace_node->color == RED)
-        {
-            replace_node->color = BLACK;
-        }
-        else
-        {
-            rb_remove_fixup(root, replace_node);
-        }
+        // release flags
+        y->flag = false;
+        if (y != z) z->flag = false;
+        goto restart; // deletion failed, try again
     }
+    
+    tree_node *x = y->left_child;
+    if (y->left_child->is_leaf)
+        x = y->right_child;
+    
+    // unlink y from the tree
+    tree_node *replace_node = replace_parent(root, y);
+    // replace the value
+    if (y != z)
+    {
+        z->value = y->value;
+        z->flag = false;
+    }
+    
+    if (y->color == BLACK) /* fixup case */
+        rb_remove_fixup(root, replace_node);
+    
+    // TODO: release flags and marker held in local area
+
     dbg_printf("[Remove] node with value %d complete.\n", value);
-    free_node(delete_node);
+    free_node(y);
 }
 
 /**
@@ -402,7 +415,10 @@ void rb_remove(tree_node *root, int value)
  */
 void rb_remove_fixup(tree_node *root, tree_node *node)
 {
-    while (!is_root(node) && node->color == BLACK)
+    bool done = false;
+    bool did_move_up = false;
+
+    while (!is_root(node) && node->color == BLACK && !done)
     {
         tree_node *brother_node;
         if (is_left(node))
@@ -420,12 +436,7 @@ void rb_remove_fixup(tree_node *root, tree_node *node)
                 brother_node->right_child->color == BLACK) // case 2
             {
                 brother_node->color = RED;
-                node = node->parent;
-                if (node->color == RED)
-                {
-                    node->color = BLACK;
-                    break;
-                }
+                node = move_deleter_up(node);
             }
             
             else if (brother_node->right_child->color == BLACK) // case 3
@@ -442,6 +453,9 @@ void rb_remove_fixup(tree_node *root, tree_node *node)
                 node->parent->color = BLACK;
                 brother_node->right_child->color = BLACK;
                 left_rotate(root, node->parent);
+
+                did_move_up = apply_move_up_rule(node, brother_node);
+                done = true;
                 break;
             }
         }
@@ -460,12 +474,7 @@ void rb_remove_fixup(tree_node *root, tree_node *node)
                      brother_node->right_child->color == BLACK)
             {
                 brother_node->color = RED;
-                node = node->parent;
-                if (node->color == RED)
-                {
-                    node->color = BLACK;
-                    break;
-                }
+                node = move_deleter_up(node);
             }
 
             else if (brother_node->left_child->color == BLACK)
@@ -482,10 +491,17 @@ void rb_remove_fixup(tree_node *root, tree_node *node)
                 node->parent->color = BLACK;
                 brother_node->left_child->color = BLACK;
                 right_rotate(root, node->parent);
+
+                did_move_up = apply_move_up_rule(node, brother_node);
+                done = true;
                 break;
             }
         }
     }
+
+    if (!did_move_up)
+        node->color = BLACK;
+    
     dbg_printf("[Remove] fixup complete.\n");
 }
 

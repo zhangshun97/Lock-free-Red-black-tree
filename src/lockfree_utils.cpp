@@ -10,31 +10,6 @@
  * helper function
  ******************/
 
-typedef struct tree_node_t
-{
-    struct tree_node_t *parent;
-    struct tree_node_t *left_child;
-    struct tree_node_t *right_child;
-    int value;
-    char color; // RED or BLACK
-    bool is_leaf;
-    atomic<bool> flag;
-    int marker;
-} tree_node;
-
-typedef struct move_up_struct_t
-{
-    tree_node *goal_node; // grandparent node
-
-    tree_node *pos1;
-    tree_node *pos2;
-    tree_node *pos3;
-    tree_node *pos4;
-
-    int other_close_process_PID;
-    bool valid;
-} move_up_struct;
-
 /* global variables */
 extern move_up_struct *move_up_list;
 extern pthread_mutex_t *move_up_lock_list;
@@ -123,6 +98,7 @@ bool spacing_rule_is_satisfied(tree_node *t, tree_node *z,
                                 int PID_to_ignore,
                                 move_up_struct *self_move_up_struct)
 {
+    bool expect;
     // We hold flags on both t and z.
     // check that t has no marker set
     if (t != z && t->marker != 0) return false;
@@ -131,8 +107,9 @@ bool spacing_rule_is_satisfied(tree_node *t, tree_node *z,
     tree_node *tp = t->parent;
     if (tp != z)
     {
+        expect = false;
         if ((!is_in(tp, self_move_up_struct)) 
-            && (!tp->flag.compare_exchange_weak(false, true)))
+            && (!tp->flag.compare_exchange_weak(expect, true)))
         {
             return false;
         }
@@ -152,8 +129,9 @@ bool spacing_rule_is_satisfied(tree_node *t, tree_node *z,
     if (is_left(t))
         ts = tp->right_child;
     
+    expect = false;
     if ((!is_in(ts, self_move_up_struct)) 
-        && (!ts->flag.compare_exchange_weak(false, true)))
+        && (!ts->flag.compare_exchange_weak(expect, true)))
     {
         if (tp != z)
             release_flag(self_move_up_struct, false, tp);
@@ -207,7 +185,7 @@ bool apply_move_up_rule(tree_node *x, tree_node *w)
     if (!case_hit)
         return false;
 
-    // build structure listing the nodes we hold flags on
+    // TODO: build structure listing the nodes we hold flags on
 
     return true;
 }
@@ -219,17 +197,20 @@ bool apply_move_up_rule(tree_node *x, tree_node *w)
  */
 bool setup_local_area_for_delete(tree_node *y, tree_node *z)
 {
+    bool expect;
     tree_node *x;
     if (y->left_child->is_leaf)
         x = y->right_child;
     else
         x = y->left_child;
     
+    expect = false;
     // Try to get flags for the rest of the local area
-    if (!x->flag.compare_exchange_weak(false, true)) return false; 
+    if (!x->flag.compare_exchange_weak(expect, true)) return false; 
     
     tree_node *yp = y->parent; // keep a copy of our parent pointer
-    if ((yp != z) && (!yp->flag.compare_exchange_weak(false, true)))
+    expect = false;
+    if ((yp != z) && (!yp->flag.compare_exchange_weak(expect, true)))
     {
         x->flag = false;
         return false;
@@ -244,7 +225,8 @@ bool setup_local_area_for_delete(tree_node *y, tree_node *z)
     if (is_left(y))
         w = y->parent->right_child;
     
-    if (!w->flag.compare_exchange_weak(false, true))
+    expect = false;
+    if (!w->flag.compare_exchange_weak(expect, true))
     {
         x->flag = false;
         if (yp != z)
@@ -256,7 +238,8 @@ bool setup_local_area_for_delete(tree_node *y, tree_node *z)
         tree_node *wlc = w->left_child;
         tree_node *wrc = w->right_child;
 
-        if (!wlc->flag.compare_exchange_weak(false, true))
+        expect = false;
+        if (!wlc->flag.compare_exchange_weak(expect, true))
         {
             x->flag = false;
             w->flag = false;
@@ -264,7 +247,8 @@ bool setup_local_area_for_delete(tree_node *y, tree_node *z)
                 yp->flag = false;
             return false;
         }
-        if (!wrc->flag.compare_exchange_weak(false, true))
+        expect = false;
+        if (!wrc->flag.compare_exchange_weak(expect, true))
         {
             x->flag = false;
             w->flag = false;
@@ -286,17 +270,81 @@ bool setup_local_area_for_delete(tree_node *y, tree_node *z)
 }
 
 /**
+ * move a deleter up the tree
+ * case 2 in deletion
+ */
+tree_node *move_deleter_up(tree_node *oldx)
+{
+    pthread_t self = pthread_self();
+    move_up_struct *moveUpStruct = &move_up_list[self];
+    bool expect;
+
+    // TODO: check for a moveUpStruct from another process
+    // get direct pointers
+    tree_node *oldp = oldx->parent;
+    tree_node *oldgp = oldp->parent;
+    tree_node *oldw = oldp->left_child;
+    if (is_left(oldx))
+        oldw = oldp->right_child;
+
+    tree_node *oldwlc = oldw->left_child;
+    tree_node *oldwrc = oldw->right_child;
+
+    // extend intention markers (getting flags to set them)
+    // from oldgp to top and one more. Also convert marker on oldgp to a flag
+    while (!get_flags_and_markers_above(oldgp, 1))
+        ;
+    
+    // get flags on the rest of new local area (w, wlc, wrc)
+    tree_node *newx = oldp;
+    tree_node *newp = newx->parent;
+    tree_node *neww = newp->left_child;
+    if (is_left(newx))
+        neww = newp->right_child;
+    
+    if (!is_in(neww, moveUpStruct))
+    {
+        do {
+            expect = false;
+        } while (!neww->flag.compare_exchange_weak(expect, true));
+    }
+    tree_node *newwlc = neww->left_child;
+    tree_node *newwrc = neww->right_child;
+    if (!is_in(newwlc, moveUpStruct))
+    {
+        do {
+            expect = false;
+        } while (!newwlc->flag.compare_exchange_weak(expect, true));
+    }
+    if (!is_in(newwrc, moveUpStruct))
+    {
+        do {
+            expect = false;
+        } while (!newwrc->flag.compare_exchange_weak(expect, true));
+    }
+
+    // release flags on old local area
+    release_flag(moveUpStruct, true, oldx);
+    release_flag(moveUpStruct, true, oldw);
+    release_flag(moveUpStruct, true, oldwlc);
+    release_flag(moveUpStruct, true, oldwrc);
+    return newx;
+}
+
+/**
  * get flags for existing intention markers
  */
 bool get_flags_for_markers(tree_node *start, move_up_struct *moveUpStruct,
                            tree_node **_pos1, tree_node **_pos2,
                            tree_node **_pos3, tree_node **_pos4)
 {
+    bool expect;
     tree_node *pos1, *pos2, *pos3, *pos4;
 
     pos1 = start->parent;
+    expect = false;
     if (!is_in(pos1, moveUpStruct) 
-        && (!pos1->flag.compare_exchange_weak(false, true)))
+        && (!pos1->flag.compare_exchange_weak(expect, true)))
         return false;
     if (pos1 != start->parent) // verify that parent is unchanged
     {  
@@ -304,8 +352,9 @@ bool get_flags_for_markers(tree_node *start, move_up_struct *moveUpStruct,
         return false;
     }
     pos2 = pos1->parent;
+    expect = false;
     if ((!is_in(pos2, moveUpStruct) 
-        && !pos2->flag.compare_exchange_weak(false, true)))
+        && !pos2->flag.compare_exchange_weak(expect, true)))
     {
         pos1->flag = false;
         return false;
@@ -317,8 +366,9 @@ bool get_flags_for_markers(tree_node *start, move_up_struct *moveUpStruct,
         return false;
     }
     pos3 = pos2->parent;
+    expect = false;
     if (!is_in(pos3, moveUpStruct) 
-        && (!pos3->flag.compare_exchange_weak(false, true)))
+        && (!pos3->flag.compare_exchange_weak(expect, true)))
     {
         pos1->flag = false;
         pos2->flag = false;
@@ -332,8 +382,9 @@ bool get_flags_for_markers(tree_node *start, move_up_struct *moveUpStruct,
         return false;
     }
     pos4 = pos3->parent;
+    expect = false;
     if (!is_in(pos4,moveUpStruct) 
-        && (!pos4->flag.compare_exchange_weak(false, true)))
+        && (!pos4->flag.compare_exchange_weak(expect, true)))
     {
         pos1->flag = false;
         pos2->flag = false;
@@ -370,15 +421,16 @@ bool get_flags_and_markers_above(tree_node *start, int numAdditional)
      */
     // TODO: need lock
     pthread_t self = pthread_self();
-    move_up_struct *moveUpStruct = move_up_list[self];
-
+    move_up_struct *moveUpStruct = &move_up_list[self];
+    bool expect;
     tree_node *pos1, *pos2, *pos3, *pos4;
     if (!get_flags_for_markers(start, moveUpStruct, &pos1, &pos2, &pos3, &pos4))
         return false;
     // Now get additional marker(s) above
     tree_node *firstnew = pos4->parent;
+    expect = false;
     if (!is_in(firstnew, moveUpStruct) 
-        && (!firstnew->flag.compare_exchange_weak(false, true)))
+        && (!firstnew->flag.compare_exchange_weak(expect, true)))
     {
         release_flag(moveUpStruct, false, pos1);
         release_flag(moveUpStruct, false, pos2);
@@ -386,7 +438,8 @@ bool get_flags_and_markers_above(tree_node *start, int numAdditional)
         release_flag(moveUpStruct, false, pos4);
         return false;
     }
-    // TODO: check this PID
+
+    // avoid the other close PID when chosen to move up
     int PIDtoIgnore = moveUpStruct->other_close_process_PID;
     if ((firstnew != pos4->parent) 
         && (!spacing_rule_is_satisfied(firstnew, start, 
@@ -404,8 +457,9 @@ bool get_flags_and_markers_above(tree_node *start, int numAdditional)
     if (numAdditional == 2) // insertion so need another marker
     {  
         secondnew = firstnew->parent;
+        expect = false;
         if ((!is_in(secondnew, moveUpStruct) 
-            && !secondnew->flag.compare_exchange_weak(false, true)))
+            && !secondnew->flag.compare_exchange_weak(expect, true)))
         {
             release_flag(moveUpStruct, false, firstnew);
             release_flag(moveUpStruct, false, pos1);
@@ -461,7 +515,8 @@ bool setup_local_area_for_insert(tree_node *x)
     bool expected = false;
     if (!parent->flag.compare_exchange_weak(expected, true))
     {
-        dbg_printf("[FLAG] failed getting flag of %lu\n", (unsigned long)parent);
+        dbg_printf("[FLAG] failed getting flag of %lu\n", 
+                   (unsigned long)parent);
         return false;
     }
 
@@ -470,7 +525,8 @@ bool setup_local_area_for_insert(tree_node *x)
     // abort when parent of x changes
     if (parent != x->parent)
     {
-        dbg_printf("[FLAG] parent changed from %lu to %lu\n", (unsigned long)parent, (unsigned long)parent);
+        dbg_printf("[FLAG] parent changed from %lu to %lu\n", 
+                   (unsigned long)parent, (unsigned long)parent);
         dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)parent);
         parent->flag = false;
         return false;
@@ -627,4 +683,85 @@ bool is_goal(tree_node *target_node, move_up_struct *target_move_up_struct)
     }
 
     return false;
+}
+
+/**
+ * find a node by getting flag hand over hand
+ * restart when conflict happens
+ */
+tree_node *par_find(tree_node *root, int value)
+{
+    bool expect;
+restart:
+    
+    tree_node *root_node = root->left_child;
+    do {
+        expect = false;
+    } while (!root_node->flag.compare_exchange_weak(expect, true));
+    
+    tree_node *y = root_node;
+    tree_node *z = NULL;
+
+    while (!y->is_leaf)
+    {
+        z = y; // store old y
+        if (value == y->value)
+            return y; // find the node y
+        else if (value > y->value)
+            y = y->right_child;
+        else
+            y = y->left_child;
+        
+        expect = false;
+        if (!y->flag.compare_exchange_weak(expect, true))
+        {
+            z->flag = false; // release held flag
+            goto restart;
+        }
+        if (!y->is_leaf)
+            z->flag = false; // release old y's flag
+    }
+    
+    dbg_printf("[WARNING] node with value %d not found.\n", value);
+    return NULL; // node not found
+}
+
+/**
+ * find a node's successor by getting flag hand over hand
+ * restart when conflict happens
+ */
+tree_node *par_find_successor(tree_node *delete_node)
+{
+    bool expect;
+    // we already hold the flag of delete_node
+    int value = delete_node->value;
+restart:
+
+    tree_node *y = delete_node;
+    tree_node *z = NULL;
+
+    while (!y->is_leaf)
+    {
+        z = y; // store old y
+        if (value > y->value)
+            y = y->right_child;
+        else
+            y = y->left_child;
+
+        expect = false;
+        if (!y->flag.compare_exchange_weak(expect, true))
+        {
+            z->flag = false; // release held flag
+            goto restart;
+        }
+        if (!y->is_leaf)
+            z->flag = false; // release old y's flag
+        else
+            return z; // find the successor
+    }
+    // program should not reach here
+    // because if delete_node is a node with 2 nil children, 
+    // itself should be returned
+    dbg_printf("[WARNING] successor of node with value %d not found.\n", value);
+    return NULL; // node not found
 }
