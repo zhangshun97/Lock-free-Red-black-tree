@@ -17,9 +17,10 @@
 #define dbg_printf(...)
 #endif
 
+#define RED 0
+#define BLACK 1
+
 using namespace std;
-
-
 
 typedef struct tree_node_t
 {
@@ -30,10 +31,25 @@ typedef struct tree_node_t
     char color; // RED or BLACK
     bool is_leaf;
     atomic<bool> flag;
+    int marker;
 } tree_node;
 
-#define RED 0
-#define BLACK 1
+typedef struct move_up_struct_t
+{
+    tree_node *goal_node; // grandparent node
+
+    tree_node *pos1;
+    tree_node *pos2;
+    tree_node *pos3;
+    tree_node *pos4;
+
+    int other_close_process_PID;
+    bool valid;
+} move_up_struct;
+
+/* global variables */
+move_up_struct *move_up_list;
+pthread_mutex_t *move_up_lock_list;
 
 /* function prototypes */
 /* main functions */
@@ -42,7 +58,6 @@ void right_rotate(tree_node *root, tree_node *node);
 void left_rotate(tree_node *root, tree_node *node);
 void tree_insert(tree_node *root, tree_node *node);
 void rb_insert(tree_node *root, int value);
-tree_node *get_remove_ndoe(tree_node *node);
 void rb_remove(tree_node *root, int value);
 void rb_remove_fixup(tree_node *root, tree_node *node);
 tree_node *tree_search(tree_node *root, int value);
@@ -55,16 +70,19 @@ bool check_tree_dfs(tree_node *root);
 bool is_root(tree_node *node);
 bool is_left(tree_node *node);
 
+tree_node *get_remove_ndoe(tree_node *node);
 tree_node *create_leaf_node(void);
 void remove_node(tree_node *node);
 tree_node *get_uncle(tree_node *node);
-tree_node *get_right_min(tree_node *node);
 int get_num_null(tree_node *node);
 tree_node *replace_parent(tree_node *root, tree_node *node);
 
 void free_node(tree_node *node);
 
 /* lock-free functions */
+bool is_in(tree_node *target_node, move_up_struct *target_move_up_struct);
+bool is_goal(tree_node *target_node, move_up_struct *target_move_up_struct);
+pthread_mutex_t *move_up_lock_init(int num_processes);
 bool setup_local_area_for_insert(tree_node *x);
 tree_node *move_inserter_up(tree_node *oldx, vector<tree_node *> &local_area);
 

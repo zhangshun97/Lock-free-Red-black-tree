@@ -7,8 +7,6 @@
  * helper function
  ******************/
 
-
-
 /**
  * show tree
  * only used for debug
@@ -428,6 +426,36 @@ tree_node *get_right_min(tree_node *node)
     // only the value
     node->value = curr_node->value;
     return curr_node;
+}
+
+/**
+ * standard binary search tree remove
+ */
+tree_node *get_remove_ndoe(tree_node *node)
+{
+    if (node->is_leaf)
+    {
+        fprintf(stderr, "[ERROR] node not found.\n");
+        return NULL;
+    }
+
+    int case_num = get_num_null(node);
+    if (case_num == 0)
+    {
+        // replace value and remove successor
+        tree_node *right_min_node = get_right_min(node);
+        if (right_min_node->is_leaf)
+            fprintf(stderr, "[ERROR] right min node error.\n");
+
+        // replace the value
+        node->value = right_min_node->value;
+        // remove right min node
+        return get_remove_ndoe(right_min_node);
+    }
+    else
+    {
+        return node;
+    }
 }
 
 /**

@@ -19,27 +19,20 @@ void run_serial();
 
 int main()
 {
+    // test settings
+    int num_processes = 2;
     load_data_from_txt();
     printf("total_size: %d\n", total_size);
-    // root = rb_init();
-    // run_serial();
-    for (int i = 1; i <= 17; i++)
-    {
-        root = rb_init();
-        run_multi_thread(i);
-    }
-    // root = rb_init();
-    // run_multi_thread(1);
-    // root = rb_init();
-    // run_multi_thread(2);
-    // root = rb_init();
-    // run_multi_thread(4);
-    // root = rb_init();
-    // run_multi_thread(8);
-    // root = rb_init();
-    // run_multi_thread(16);
+
+    // init moveUpStruct
+    move_up_list =
+        (move_up_struct *)malloc(sizeof(move_up_struct) * num_processes);
+    move_up_lock_list = move_up_lock_init(num_processes);
+
+    // run experiments
     root = rb_init();
-    run_multi_thread(32);
+    run_multi_thread(num_processes);
+
     return 0;
 }
 

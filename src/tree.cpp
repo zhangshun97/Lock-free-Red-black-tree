@@ -163,28 +163,10 @@ void tree_insert(tree_node *root, tree_node *new_node)
         z = curr_node;
         if (value > curr_node->value) /* go right */
         {
-            // if (curr_node->right_child->is_leaf)
-            // {
-            //     free_node(curr_node->right_child);
-            //     curr_node->right_child = new_node;
-            //     new_node->parent = curr_node;
-            //     dbg_printf("[Insert] new node with value (%d)\n", value);
-            //     return;
-            // }
-            
             curr_node = curr_node->right_child;
         }
         else /* go left */
         {
-            // if (curr_node->left_child->is_leaf)
-            // {
-            //     free_node(curr_node->left_child);
-            //     curr_node->left_child = new_node;
-            //     new_node->parent = curr_node;
-            //     dbg_printf("[Insert] new node with value (%d)\n", value);
-            //     return;
-            // }
-
             curr_node = curr_node->left_child;
         }
 
@@ -238,8 +220,6 @@ void tree_insert(tree_node *root, tree_node *new_node)
     }
     
     dbg_printf("[Insert] new node with value (%d)\n", value);
-
-    // dbg_printf("[Insert] failed\n");
 }
 
 /**
@@ -380,177 +360,24 @@ void rb_insert(tree_node *root, int value)
     dbg_printf("[Insert] rb fixup complete.\n");
 }
 
-bool setup_local_area_for_insert(tree_node *x) {
-    tree_node *parent = x->parent;
-    tree_node *uncle = NULL;
-
-    if (parent == NULL) return true;
-    
-    // if (!x->flag.compare_exchange_strong(expected, true))
-    // {
-    //     return false;
-    // }
-
-    // print_get(x);
-
-    bool expected = false;
-    if (!parent->flag.compare_exchange_weak(expected, true))
-    {
-        dbg_printf("[FLAG] failed getting flag of %lu\n", (unsigned long)parent);
-        return false;
-    }
-
-    dbg_printf("[FLAG] get flag of %lu\n", (unsigned long)parent);
-    
-    // fail when parent of x changes
-    if (parent != x->parent)
-    {
-        dbg_printf("[FLAG] parent changed from %lu to %lu\n", (unsigned long)parent, (unsigned long)parent);
-        dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)parent);
-        parent->flag = false;
-        return false;
-    }
-
-    if (x == x->parent->left_child)
-    {
-        uncle = x->parent->right_child;
-    }
-    else
-    {
-        uncle = x->parent->left_child;
-    }
-
-    expected = false;
-    if (!uncle->flag.compare_exchange_weak(expected, true))
-    {
-        dbg_printf("[FLAG] failed getting flag of %lu\n", (unsigned long)uncle);
-        dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)x->parent);
-        x->parent->flag = false;
-        return false;
-    }
-
-    dbg_printf("[FLAG] get flag of %lu\n", (unsigned long)uncle);
-
-    // now the process has the flags of x, x's parent and x's uncle
-    return true;
-}
-
-tree_node *move_inserter_up(tree_node *oldx, vector<tree_node *> &local_area)
-{
-    tree_node *oldp = oldx->parent;
-    tree_node *oldgp = oldp->parent;
-    // tree_node *uncle = NULL;
-    // if (oldp == oldgp->left_child)
-    // {
-    //     uncle = oldgp->right_child;
-    // }
-    // else
-    // {
-    //     uncle = oldgp->left_child;
-    // }
-
-    bool expected = false;
-
-    tree_node *newx, *newp = NULL, *newgp = NULL, *newuncle = NULL;
-    newx = oldgp;
-    while(true && newx->parent != NULL)
-    {
-        newp = newx->parent;
-        expected = false;
-        if (!newp->flag.compare_exchange_weak(expected, true))
-        {
-            dbg_printf("[FLAG] failed getting flag of %lu\n", (unsigned long)newp);
-            continue;
-        }
-
-        dbg_printf("[FLAG] get flag of %lu\n", (unsigned long)newp);
-
-        newgp = newp->parent;
-        if (newgp == NULL) break;
-        expected = false;
-        if (!newgp->flag.compare_exchange_weak(expected, true))
-        {
-            dbg_printf("[FLAG] failed getting flag of %lu\n", (unsigned long)newgp);
-            dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)newp);
-            newp->flag = false;
-            continue;
-        }
-
-        dbg_printf("[FLAG] get flag of %lu\n", (unsigned long)newgp);
-
-        if (newp == newgp->left_child)
-        {
-            newuncle = newgp->right_child;
-        }
-        else
-        {
-            newuncle = newgp->left_child;
-        }
-
-        expected = false;
-        if (!newuncle->flag.compare_exchange_weak(expected, true))
-        {
-            dbg_printf("[FLAG] failed getting flag of %lu\n", (unsigned long)newuncle);
-            dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)newgp);
-            dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)newp);
-            newgp->flag = false;
-            newp->flag = false;
-            continue;
-        }
-
-        dbg_printf("[FLAG] get flag of %lu\n", (unsigned long)newuncle);
-
-        // now the process has the flags of newp, newgp and newuncle
-        break;
-    }
-
-    local_area.push_back(newx);
-    local_area.push_back(newp);
-    local_area.push_back(newgp);
-    local_area.push_back(newuncle);
-
-    return newx;
-}
-
-/**
- * standard binary search tree remove
- */
-tree_node *get_remove_ndoe(tree_node *node)
-{
-    if (node->is_leaf)
-    {
-        fprintf(stderr, "[ERROR] node not found.\n");
-        return NULL;
-    }
-
-    int case_num = get_num_null(node);
-    if (case_num == 0)
-    {
-        // replace value and remove successor
-        tree_node *right_min_node = get_right_min(node);
-        if (right_min_node->is_leaf)
-            fprintf(stderr, "[ERROR] right min node error.\n");
-        
-        // replace the value
-        node->value = right_min_node->value;
-        // remove right min node
-        return get_remove_ndoe(right_min_node);
-    }
-    else
-    {
-        return node;
-    }
-}
-
 /**
  * red-black tree remove
  */
 void rb_remove(tree_node *root, int value)
 {
-    tree_node *node = tree_search(root, value);
+    tree_node *node;
+    do {
+        node = tree_search(root, value);
+    } while (!node->flag.compare_exchange_weak(false, true));
+    
     tree_node *delete_node, *replace_node;
+    do {
     delete_node = get_remove_ndoe(node);
-    dbg_printf("[Remove] node to delete with value %d.\n", value);
+    } while (!delete_node->flag.compare_exchange_weak(false, true));
+    // we now hold the flag of y(delete_node) AND of z(node)
+
+    // set up for local area delete
+
     replace_node = replace_parent(root, delete_node);
 
     if (delete_node->color == BLACK) /* fixup case */
