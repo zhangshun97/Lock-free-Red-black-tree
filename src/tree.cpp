@@ -141,34 +141,39 @@ void tree_insert(tree_node *root, tree_node *new_node)
         tree_node *parent = curr_node;
         if (value > curr_node->value)       /* go right */
         {
-            if (curr_node->right_child->is_leaf)
-            {
-                free_node(curr_node->right_child);
-                curr_node->right_child = new_node;
-                new_node->parent = curr_node;
-                dbg_printf("[Insert] new node with value (%d)\n", value);
-                return;
-            }
+            // if (curr_node->right_child->is_leaf)
+            // {
+            //     free_node(curr_node->right_child);
+            //     curr_node->right_child = new_node;
+            //     new_node->parent = curr_node;
+            //     dbg_printf("[Insert] new node with value (%d)\n", value);
+            //     return;
+            // }
             
             curr_node = curr_node->right_child;
         }
         else if (value < curr_node->value)  /* go left */
         {
-            if (curr_node->left_child->is_leaf)
-            {
-                free_node(curr_node->left_child);
-                curr_node->left_child = new_node;
-                new_node->parent = curr_node;
-                dbg_printf("[Insert] new node with value (%d)\n", value);
-                return;
-            }
+            // if (curr_node->left_child->is_leaf)
+            // {
+            //     free_node(curr_node->left_child);
+            //     curr_node->left_child = new_node;
+            //     new_node->parent = curr_node;
+            //     dbg_printf("[Insert] new node with value (%d)\n", value);
+            //     return;
+            // }
 
             curr_node = curr_node->left_child;
         } else {                            /* found */
             found = 1;
         }
 
-        if ()
+        if (is_black(curr_node) && is_black(parent) && parent != locked_node)
+        {
+            get_write_lock(parent);
+            release_write_lock(locked_node);
+            locked_node = parent;
+        }
     }
 
     dbg_printf("[Insert] failed\n");
