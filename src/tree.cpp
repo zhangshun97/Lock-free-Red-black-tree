@@ -118,19 +118,28 @@ void tree_insert(tree_node *root, tree_node *new_node)
 {
     int value = new_node->value;
 
+    get_write_lock(root);
+
     if (root->left_child->is_leaf)
     {
         free_node(root->left_child);
         root->left_child = new_node;
         dbg_printf("[Insert] new node with value (%d)\n", value);
+        release_write_lock(root);
         return;
     }
+
+    release_write_lock(root);
     
     // insert like any binary search tree
     tree_node *curr_node = root->left_child;
-    while (!curr_node->is_leaf)
+    bool found = 0;
+    get_write_lock(curr_node);
+    tree_node *locked_node = curr_node;
+    while (!curr_node->is_leaf && !found)
     {
-        if (value > curr_node->value) /* go right */
+        tree_node *parent = curr_node;
+        if (value > curr_node->value)       /* go right */
         {
             if (curr_node->right_child->is_leaf)
             {
@@ -143,7 +152,7 @@ void tree_insert(tree_node *root, tree_node *new_node)
             
             curr_node = curr_node->right_child;
         }
-        else /* go left */
+        else if (value < curr_node->value)  /* go left */
         {
             if (curr_node->left_child->is_leaf)
             {
@@ -155,7 +164,11 @@ void tree_insert(tree_node *root, tree_node *new_node)
             }
 
             curr_node = curr_node->left_child;
+        } else {                            /* found */
+            found = 1;
         }
+
+        if ()
     }
 
     dbg_printf("[Insert] failed\n");
