@@ -5,7 +5,8 @@ BUILD_DIR = $(TOP_DIR)/build
 CC=g++
 FLAGS = -pthread -fPIC -g -ggdb -Wall -I$(INC_DIR) -std=c++11
 OBJS = $(BUILD_DIR)/tree.o \
-	$(BUILD_DIR)/utils.o
+	$(BUILD_DIR)/utils.o \
+	$(BUILD_DIR)/lockfree_utils.o
 
 default: all
 all: test test_parallel

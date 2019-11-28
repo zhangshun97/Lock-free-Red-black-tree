@@ -8,6 +8,24 @@
  ******************/
 
 /**
+ * create a dummy black node, for initialization use
+ */
+tree_node *create_dummy_node(void)
+{
+    tree_node *node;
+    node = (tree_node *)malloc(sizeof(tree_node));
+    node->color = BLACK;
+    node->value = INT32_MAX;
+    node->left_child = create_leaf_node();
+    node->right_child = create_leaf_node();
+    node->is_leaf = false;
+    node->parent = NULL;
+    node->flag = false;
+    node->marker = DEFAULT_MARKER;
+    return node;
+}
+
+/**
  * show tree
  * only used for debug
  * because only small tree can be shown

@@ -24,14 +24,10 @@ int main()
     load_data_from_txt();
     printf("total_size: %d\n", total_size);
 
-    // init moveUpStruct
-    move_up_list =
-        (move_up_struct *)malloc(sizeof(move_up_struct) * num_processes);
-    move_up_lock_list = move_up_lock_init(num_processes);
-
     // run experiments
     root = rb_init();
-    run_multi_thread(num_processes);
+    // run_multi_thread(num_processes);
+    run_serial();
 
     return 0;
 }
@@ -39,6 +35,7 @@ int main()
 void run_serial()
 {
     struct timespec start, end;
+    double elapsed_time;
 
     clock_gettime(CLOCK_MONOTONIC, &start);
     for (int i = 0; i < total_size; i++)
@@ -46,10 +43,21 @@ void run_serial()
         rb_insert(root, numbers[i]);
     }
     clock_gettime(CLOCK_MONOTONIC, &end);
-    double elapsed_time = (end.tv_sec - start.tv_sec) * 1e9;
+    elapsed_time = (end.tv_sec - start.tv_sec) * 1e9;
     elapsed_time += (end.tv_nsec - start.tv_nsec);
     elapsed_time *= 1e-9;
-    cout << "time taken by program with 1 threads: " << fixed << elapsed_time << "sec" << endl;
+    cout << "time taken by insert with 1 threads: " << fixed << elapsed_time << "sec" << endl;
+
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    for (int i = 0; i < total_size; i++)
+    {
+        rb_remove(root, numbers[i]);
+    }
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    elapsed_time = (end.tv_sec - start.tv_sec) * 1e9;
+    elapsed_time += (end.tv_nsec - start.tv_nsec);
+    elapsed_time *= 1e-9;
+    cout << "time taken by delete with 1 threads: " << fixed << elapsed_time << "sec" << endl;
 }
 
 void *run(void *p)

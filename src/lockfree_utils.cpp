@@ -11,8 +11,11 @@
  ******************/
 
 /* global variables */
-extern move_up_struct *move_up_list;
-extern pthread_mutex_t *move_up_lock_list;
+move_up_struct *move_up_list = NULL;
+pthread_mutex_t *move_up_lock_list = NULL;
+
+/* thread-local variables */
+thread_local vector<tree_node *> nodes_own_flag;
 
 /**
  * initialize the lock list for moveUpStruct list
@@ -21,7 +24,7 @@ pthread_mutex_t *move_up_lock_init(int num_processes)
 {
     pthread_mutex_t *move_up_lock_list =
         (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t) * num_processes);
-    for (size_t i = 0; i < num_processes; i++)
+    for (int i = 0; i < num_processes; i++)
     {
         pthread_mutex_init(&move_up_lock_list[i], NULL);
     }
@@ -29,40 +32,17 @@ pthread_mutex_t *move_up_lock_init(int num_processes)
 }
 
 /**
- * releasr flags unless node is in move up struct
- * TODO: check if this is needed?
+ * clear local area
  */
-void release_flags(move_up_struct *target_move_up_struct, 
-                   bool success,
-                   vector<tree_node *>nodes_to_release)
+void clear_local_area(void)
 {
-    for (auto target_node : nodes_to_release)
-    {
-        if (success)
-        {
-            if (!is_in(target_node, target_move_up_struct))
-                target_node->flag = false;
-            else // target node is in the inherited local area
-            {
-                if (is_goal(target_node, target_move_up_struct))
-                {
-                    // TODO: release unneeded flags in moveUpStruct 
-                    // and discard moveUpStruct
-                }
-            }
-        }
-        else // release flag after failing to move up
-        {
-            if (!is_in(target_node, target_move_up_struct))
-            {
-                target_node->flag = false;
-            }
-        }
-    }
+    for (auto node : nodes_own_flag)
+        node->flag = false;
+    nodes_own_flag.clear();
 }
 
 /**
- * releasr flags unless node is in move up struct
+ * release flags unless node is in move up struct
  * TODO: check if this is good enough?
  */
 void release_flag(move_up_struct *target_move_up_struct,
@@ -77,8 +57,7 @@ void release_flag(move_up_struct *target_move_up_struct,
         {
             if (is_goal(target_node, target_move_up_struct))
             {
-                // TODO: release unneeded flags in moveUpStruct
-                // and discard moveUpStruct
+                clear_self_moveUpStruct();
             }
         }
     }
@@ -93,6 +72,8 @@ void release_flag(move_up_struct *target_move_up_struct,
 
 /**
  * return true if spacing rule is satisfied
+ * 
+ * z - the node returned by par_find()
  */
 bool spacing_rule_is_satisfied(tree_node *t, tree_node *z,
                                 int PID_to_ignore,
@@ -101,7 +82,7 @@ bool spacing_rule_is_satisfied(tree_node *t, tree_node *z,
     bool expect;
     // We hold flags on both t and z.
     // check that t has no marker set
-    if (t != z && t->marker != 0) return false;
+    if (t != z && t->marker != DEFAULT_MARKER) return false;
 
     // check that t’s parent has no flag or marker
     tree_node *tp = t->parent;
@@ -118,7 +99,7 @@ bool spacing_rule_is_satisfied(tree_node *t, tree_node *z,
             tp->flag = false;
             return false;
         }
-        if (tp->marker != 0)
+        if (tp->marker != DEFAULT_MARKER)
         {
             tp->flag = false;
             return false;
@@ -137,7 +118,7 @@ bool spacing_rule_is_satisfied(tree_node *t, tree_node *z,
             release_flag(self_move_up_struct, false, tp);
         return false;
     }
-    if ((ts->marker != 0) && (ts->marker != PID_to_ignore))
+    if ((ts->marker != DEFAULT_MARKER) && (ts->marker != PID_to_ignore))
     {
         release_flag(self_move_up_struct, false, ts);
         if (tp != z)
@@ -162,22 +143,22 @@ bool apply_move_up_rule(tree_node *x, tree_node *w)
     bool case_hit = false;
     if (w->marker == w->parent->marker 
         && w->marker == w->right_child->marker 
-        && w->marker != 0 
-        && w->left_child->marker != 0) /* situation figure 17 */
+        && w->marker != DEFAULT_MARKER 
+        && w->left_child->marker != DEFAULT_MARKER) /* case figure 17 */
     {
         case_hit = true;
     }
     else if (w->marker == w->parent->marker 
              && w->marker == w->right_child->marker 
-             && w->marker != 0 
-             && w->left_child->marker != 0) /* situation figure 18 */
+             && w->marker != DEFAULT_MARKER 
+             && w->left_child->marker != DEFAULT_MARKER) /* case figure 18 */
     {
         case_hit = true;
     }
     else if (w->marker == w->parent->marker 
              && w->marker == w->right_child->marker 
-             && w->marker != 0 
-             && w->left_child->marker != 0) /* situation figure 19 */
+             && w->marker != DEFAULT_MARKER 
+             && w->left_child->marker != DEFAULT_MARKER) /* case figure 19 */
     {
         case_hit = true;
     }
@@ -185,9 +166,48 @@ bool apply_move_up_rule(tree_node *x, tree_node *w)
     if (!case_hit)
         return false;
 
-    // TODO: build structure listing the nodes we hold flags on
+    // Claim that struct of the inherit one is not valid at this moment
+    // Otherwise, every process will have more than one valid struct 
+    // at the same time
+    int tid_left = w->left_child->marker;
+    int tid_right = w->right_child->marker;
+
+    int move_up_tid = tid_right;
+    int other_tid = tid_left;
+    if (w->marker == tid_left)
+    {
+        move_up_tid = tid_left;
+        other_tid = tid_right;
+    }
+    
+    // TODO: check this lock area
+    pthread_mutex_lock(&move_up_lock_list[move_up_tid]);
+    move_up_struct *moveUpStruct = &move_up_list[move_up_tid];
+    moveUpStruct->other_close_process_TID = other_tid;
+    moveUpStruct->goal_node = w->parent->parent;
+    moveUpStruct->nodes_with_flag.clear();
+    for (auto node : nodes_own_flag)
+        moveUpStruct->nodes_with_flag.push_back(node);
+    moveUpStruct->valid = true;
+    pthread_mutex_unlock(&move_up_lock_list[move_up_tid]);
 
     return true;
+}
+
+/**
+ * clear self moveUpStruct if possible after deletion done
+ */
+void clear_self_moveUpStruct(void)
+{
+    int self = (int) pthread_self();
+    pthread_mutex_lock(&move_up_lock_list[self]);
+    move_up_struct *moveUpStruct = &move_up_list[self];
+    if (!moveUpStruct->valid) return;
+    for (auto node : moveUpStruct->nodes_with_flag)
+        node->flag = false;
+    moveUpStruct->nodes_with_flag.clear();
+    moveUpStruct->valid = false;
+    pthread_mutex_unlock(&move_up_lock_list[self]);
 }
 
 /**
@@ -206,7 +226,7 @@ bool setup_local_area_for_delete(tree_node *y, tree_node *z)
     
     expect = false;
     // Try to get flags for the rest of the local area
-    if (!x->flag.compare_exchange_weak(expect, true)) return false; 
+    if (!x->flag.compare_exchange_weak(expect, true)) return false;
     
     tree_node *yp = y->parent; // keep a copy of our parent pointer
     expect = false;
@@ -233,10 +253,12 @@ bool setup_local_area_for_delete(tree_node *y, tree_node *z)
             yp->flag = false;
         return false;
     }
+
+    tree_node *wlc, *wrc;
     if (!w->is_leaf)
     {
-        tree_node *wlc = w->left_child;
-        tree_node *wrc = w->right_child;
+        wlc = w->left_child;
+        wrc = w->right_child;
 
         expect = false;
         if (!wlc->flag.compare_exchange_weak(expect, true))
@@ -258,77 +280,34 @@ bool setup_local_area_for_delete(tree_node *y, tree_node *z)
             return false;
         }
     }
-    // TODO:
-    // if (!GetFlagsAndMarkersAbove(yp, z))
+
+    // TODO: no need to get the four markers, here
+    // if (!get_markers_above(yp))
     // {
-    //     flag[x] = flag[w] = flag[wlc] = flag[wrc] = FALSE;
+    //     x->flag = false;
+    //     w->flag = false;
+    //     if (!w->is_leaf)
+    //     {
+    //         wlc->flag = false;
+    //         wrc->flag = false;
+    //     }
     //     if (yp != z)
-    //         flag[yp] = FALSE;
+    //         yp->flag = false;
     //     return false;
     // }
+
+    // local area setup
+    nodes_own_flag.push_back(x);
+    nodes_own_flag.push_back(w);
+    if (!w->is_leaf)
+    {
+        nodes_own_flag.push_back(wlc);
+        nodes_own_flag.push_back(wrc);
+    }
+    if (yp != z) // TODO: check this
+        nodes_own_flag.push_back(yp);
+
     return true;
-}
-
-/**
- * move a deleter up the tree
- * case 2 in deletion
- */
-tree_node *move_deleter_up(tree_node *oldx)
-{
-    pthread_t self = pthread_self();
-    move_up_struct *moveUpStruct = &move_up_list[self];
-    bool expect;
-
-    // TODO: check for a moveUpStruct from another process
-    // get direct pointers
-    tree_node *oldp = oldx->parent;
-    tree_node *oldgp = oldp->parent;
-    tree_node *oldw = oldp->left_child;
-    if (is_left(oldx))
-        oldw = oldp->right_child;
-
-    tree_node *oldwlc = oldw->left_child;
-    tree_node *oldwrc = oldw->right_child;
-
-    // extend intention markers (getting flags to set them)
-    // from oldgp to top and one more. Also convert marker on oldgp to a flag
-    while (!get_flags_and_markers_above(oldgp, 1))
-        ;
-    
-    // get flags on the rest of new local area (w, wlc, wrc)
-    tree_node *newx = oldp;
-    tree_node *newp = newx->parent;
-    tree_node *neww = newp->left_child;
-    if (is_left(newx))
-        neww = newp->right_child;
-    
-    if (!is_in(neww, moveUpStruct))
-    {
-        do {
-            expect = false;
-        } while (!neww->flag.compare_exchange_weak(expect, true));
-    }
-    tree_node *newwlc = neww->left_child;
-    tree_node *newwrc = neww->right_child;
-    if (!is_in(newwlc, moveUpStruct))
-    {
-        do {
-            expect = false;
-        } while (!newwlc->flag.compare_exchange_weak(expect, true));
-    }
-    if (!is_in(newwrc, moveUpStruct))
-    {
-        do {
-            expect = false;
-        } while (!newwrc->flag.compare_exchange_weak(expect, true));
-    }
-
-    // release flags on old local area
-    release_flag(moveUpStruct, true, oldx);
-    release_flag(moveUpStruct, true, oldw);
-    release_flag(moveUpStruct, true, oldwlc);
-    release_flag(moveUpStruct, true, oldwrc);
-    return newx;
 }
 
 /**
@@ -408,10 +387,105 @@ bool get_flags_for_markers(tree_node *start, move_up_struct *moveUpStruct,
 }
 
 /**
+ * try to get four markers above
+ * 
+ * @params:
+ *      start - parent node of the actual node to be deleted
+ */
+bool get_markers_above(tree_node *start)
+{
+    int self = (int)pthread_self();
+    move_up_struct *moveUpStruct = &move_up_list[self];
+    bool expect;
+
+    // Now get marker(s) above
+    tree_node *pos1, *pos2, *pos3, *pos4;
+
+    pos1 = start->parent;
+    expect = false;
+    if (!is_in(pos1, moveUpStruct) 
+        && (!pos1->flag.compare_exchange_weak(expect, true)))
+        return false;
+
+    if ((pos1 != start->parent) 
+        && (!spacing_rule_is_satisfied(pos1, NULL,
+                                       self, moveUpStruct)))
+        return false;
+
+    pos2 = pos1->parent;
+    expect = false;
+    if (!is_in(pos2, moveUpStruct) 
+        && (!pos2->flag.compare_exchange_weak(expect, true)))
+    {
+        release_flag(moveUpStruct, false, pos1);
+        return false;
+    }
+
+    if ((pos2 != pos1->parent) 
+        && (!spacing_rule_is_satisfied(pos2, NULL,
+                                       self, moveUpStruct)))
+    {
+        release_flag(moveUpStruct, false, pos1);
+        return false;
+    }
+
+    pos3 = pos2->parent;
+    expect = false;
+    if (!is_in(pos3, moveUpStruct) 
+        && (!pos3->flag.compare_exchange_weak(expect, true)))
+    {
+        release_flag(moveUpStruct, false, pos1);
+        release_flag(moveUpStruct, false, pos2);
+        return false;
+    }
+
+    if ((pos3 != pos2->parent) 
+        && (!spacing_rule_is_satisfied(pos3, NULL,
+                                       self, moveUpStruct)))
+    {
+        release_flag(moveUpStruct, false, pos1);
+        release_flag(moveUpStruct, false, pos2);
+        return false;
+    }
+
+    pos4 = pos3->parent;
+    expect = false;
+    if (!is_in(pos4, moveUpStruct) 
+        && (!pos4->flag.compare_exchange_weak(expect, true)))
+    {
+        release_flag(moveUpStruct, false, pos1);
+        release_flag(moveUpStruct, false, pos2);
+        release_flag(moveUpStruct, false, pos3);
+        return false;
+    }
+
+    if ((pos4 != pos3->parent) 
+        && (!spacing_rule_is_satisfied(pos4, NULL,
+                                       self, moveUpStruct)))
+    {
+        release_flag(moveUpStruct, false, pos1);
+        release_flag(moveUpStruct, false, pos2);
+        release_flag(moveUpStruct, false, pos3);
+        return false;
+    }
+
+    // successfully get the four markers
+    pos1->marker = self;
+    pos2->marker = self;
+    pos3->marker = self;
+    pos4->marker = self;
+
+    return true;
+}
+
+/**
  * add intention markers (four is sufficient) as needed
  */
 bool get_flags_and_markers_above(tree_node *start, int numAdditional)
 {
+    // get markers first
+    if (!get_markers_above(start)) return false;
+    
     /**
      * Check for a moveUpStruct provided by another process (due to 
      * Move-Up rule processing) and set ’PIDtoIgnore’ to the PID 
@@ -419,8 +493,7 @@ bool get_flags_and_markers_above(tree_node *start, int numAdditional)
      * if a node is in the moveUpStruct. 
      * Start by getting flags on the four nodes we have markers on.
      */
-    // TODO: need lock
-    pthread_t self = pthread_self();
+    int self = (int) pthread_self();
     move_up_struct *moveUpStruct = &move_up_list[self];
     bool expect;
     tree_node *pos1, *pos2, *pos3, *pos4;
@@ -440,7 +513,7 @@ bool get_flags_and_markers_above(tree_node *start, int numAdditional)
     }
 
     // avoid the other close PID when chosen to move up
-    int PIDtoIgnore = moveUpStruct->other_close_process_PID;
+    int PIDtoIgnore = moveUpStruct->other_close_process_TID;
     if ((firstnew != pos4->parent) 
         && (!spacing_rule_is_satisfied(firstnew, start, 
                                        PIDtoIgnore, moveUpStruct)))
@@ -482,10 +555,9 @@ bool get_flags_and_markers_above(tree_node *start, int numAdditional)
         }
     }
 
-    pid_t my_pid = getpid();
-    firstnew->marker = my_pid;
+    firstnew->marker = self;
     if (numAdditional == 2)
-        secondnew->marker = my_pid;
+        secondnew->marker = self;
 
     // release the four topmost flags acquired to extend markers.
     // This leaves flags on nodes now in the new local area.
@@ -501,6 +573,307 @@ bool get_flags_and_markers_above(tree_node *start, int numAdditional)
     return true;
 }
 
+/**
+ * try to release four markers above
+ * this is the anti-function of get_markers_above()
+ * this should always be valid if the rotation fixups are doing well
+ * 
+ * @params:
+ *      start - parent node of the actual node to be deleted
+ *      z - the node returned by par_find()
+ */
+bool release_markers_above(tree_node *start, tree_node *z)
+{
+    int self = (int) pthread_self();
+    bool expect;
+    
+    // release 4 marker(s) above start node
+    tree_node *pos1, *pos2, *pos3, *pos4;
+
+    pos1 = start->parent;
+    expect = false;
+    if (!pos1->flag.compare_exchange_weak(expect, true))
+        return false;
+    if (pos1 != start->parent) // verify that parent is unchanged
+    {  
+        pos1->flag = false;
+        return false;
+    }
+    pos2 = pos1->parent;
+    expect = false;
+    if (!pos2->flag.compare_exchange_weak(expect, true))
+    {
+        pos1->flag = false;
+        return false;
+    }
+    if (pos2 != pos1->parent) // verify that parent is unchanged
+    {
+        pos1->flag = false;
+        pos2->flag = false;
+        return false;
+    }
+    pos3 = pos2->parent;
+    expect = false;
+    if (!pos3->flag.compare_exchange_weak(expect, true))
+    {
+        pos1->flag = false;
+        pos2->flag = false;
+        return false;
+    }
+    if (pos3 != pos2->parent) // verify that parent is unchanged
+    {
+        pos1->flag = false;
+        pos2->flag = false;
+        pos3->flag = false;
+        return false;
+    }
+    pos4 = pos3->parent;
+    expect = false;
+    if (!pos4->flag.compare_exchange_weak(expect, true))
+    {
+        pos1->flag = false;
+        pos2->flag = false;
+        pos3->flag = false;
+        return false;
+    }
+    if (pos4 != pos3->parent) // verify that parent is unchanged
+    {
+        pos1->flag = false;
+        pos2->flag = false;
+        pos3->flag = false;
+        pos4->flag = false;
+        return false;
+    }
+
+    // release these markers
+    if (pos1->marker == self) pos1->marker = DEFAULT_MARKER;
+    if (pos2->marker == self) pos2->marker = DEFAULT_MARKER;
+    if (pos3->marker == self) pos3->marker = DEFAULT_MARKER;
+    if (pos4->marker == self) pos4->marker = DEFAULT_MARKER;
+    
+    // release flags
+    pos1->flag = false;
+    pos2->flag = false;
+    pos3->flag = false;
+    pos4->flag = false;
+
+    return true;
+}
+
+/**
+ * move a deleter up the tree
+ * case 2 in deletion
+ */
+tree_node *move_deleter_up(tree_node *oldx)
+{
+    int self = (int) pthread_self();
+    // here is the only place to lock the struct
+    pthread_mutex_lock(&move_up_lock_list[self]);
+    move_up_struct *moveUpStruct = &move_up_list[self];
+    bool expect;
+
+    // TODO: check for a moveUpStruct from another process
+    // get direct pointers
+    tree_node *oldp = oldx->parent;
+    tree_node *oldw = oldp->left_child;
+    if (is_left(oldx))
+        oldw = oldp->right_child;
+
+    tree_node *oldwlc = oldw->left_child;
+    tree_node *oldwrc = oldw->right_child;
+
+    // extend intention markers (getting flags to set them)
+    // from oldgp to top and one more. Also convert marker on oldgp to a flag
+    while (!get_flags_and_markers_above(oldp, 1))
+        ;
+    
+    // get flags on the rest of new local area (w, wlc, wrc)
+    tree_node *newx = oldp;
+    tree_node *newp = newx->parent;
+    tree_node *neww = newp->left_child;
+    if (is_left(newx))
+        neww = newp->right_child;
+    
+    if (!is_in(neww, moveUpStruct))
+    {
+        do {
+            expect = false;
+        } while (!neww->flag.compare_exchange_weak(expect, true));
+    }
+    tree_node *newwlc = neww->left_child;
+    tree_node *newwrc = neww->right_child;
+    if (!is_in(newwlc, moveUpStruct))
+    {
+        do {
+            expect = false;
+        } while (!newwlc->flag.compare_exchange_weak(expect, true));
+    }
+    if (!is_in(newwrc, moveUpStruct))
+    {
+        do {
+            expect = false;
+        } while (!newwrc->flag.compare_exchange_weak(expect, true));
+    }
+
+    // release flags on old local area
+    release_flag(moveUpStruct, true, oldx);
+    release_flag(moveUpStruct, true, oldw);
+    release_flag(moveUpStruct, true, oldwlc);
+    release_flag(moveUpStruct, true, oldwrc);
+
+    pthread_mutex_unlock(&move_up_lock_list[self]);
+    return newx;
+}
+
+
+/**
+ * fix the side effect of delete case 1
+ * 1. adjust the local area of the process that has done the rotation
+ * 2. move any relocated markers from other processes to where 
+ *    they belong after the rotation 
+ *    --> clear all the 'naughty' markers within old local area
+ */
+void fix_up_case1(tree_node *x, tree_node *w)
+{
+    tree_node *oldw = x->parent->parent;
+    tree_node *oldwlc = x->parent->right_child;
+    int self = (int)pthread_self();
+
+    // clear markers
+    if (oldw->marker != DEFAULT_MARKER && oldw->marker == oldwlc->marker)
+    {
+        x->parent->marker = oldw->marker;
+    }
+
+    // set w's marker before releasing its flag
+    oldw->marker = self;
+    oldw->flag = false;
+
+    // release the fifth marker
+    oldw->parent->parent->parent->parent->marker = DEFAULT_MARKER;
+
+    // get the flag of the new wlc & wrc
+    // TODO: this will always be valid because of Spacing Rule
+    // which means others may hold markers on them, but no flags on them
+    w->left_child->flag = true;
+    w->right_child->flag = true;
+
+    // new local area
+    nodes_own_flag.clear();
+    nodes_own_flag.push_back(x);
+    nodes_own_flag.push_back(x->parent);
+    nodes_own_flag.push_back(w);
+    nodes_own_flag.push_back(w->left_child);
+    nodes_own_flag.push_back(w->right_child);
+}
+
+/**
+ * fix the side effect of delete case 3
+ * 1. adjust the local area of the process that has done the rotation
+ * 2. move any relocated markers from other processes to where 
+ *    they belong after the rotation
+ * layout:
+ *    2
+ * 1     3
+ *     4   5
+ *    6 7
+ */
+void fix_up_case3(tree_node *x, tree_node *w)
+{
+    tree_node *oldw = w->right_child->right_child;
+    tree_node *oldwrc = oldw->right_child;
+
+    // clear all the markers within old local area
+    for (auto node : nodes_own_flag)
+        node->marker = DEFAULT_MARKER;
+
+    // get the flag of the new wlc & wrc
+    // TODO: this will always be valid because of Spacing Rule
+    // which means others may hold markers on them, but no flags on them
+    w->left_child->flag = true;
+    oldwrc->flag = false;
+
+    // new local area
+    nodes_own_flag.clear();
+    nodes_own_flag.push_back(x);
+    nodes_own_flag.push_back(x->parent);
+    nodes_own_flag.push_back(w);
+    nodes_own_flag.push_back(w->left_child);
+    nodes_own_flag.push_back(oldw);
+}
+
+/**
+ * fix the side effect of delete case 1 - mirror case
+ * 1. adjust the local area of the process that has done the rotation
+ * 2. move any relocated markers from other processes to where 
+ *    they belong after the rotation 
+ *    --> clear all the 'naughty' markers within old local area
+ */
+void fix_up_case1_r(tree_node *x, tree_node *w)
+{
+    tree_node *oldw = x->parent->parent;
+    tree_node *oldwrc = x->parent->left_child;
+    int self = (int)pthread_self();
+
+    // clear markers
+    if (oldw->marker != DEFAULT_MARKER && oldw->marker == oldwrc->marker)
+    {
+        x->parent->marker = oldw->marker;
+    }
+
+    // set w's marker before releasing its flag
+    oldw->marker = self;
+    oldw->flag = false;
+
+    // release the fifth marker
+    oldw->parent->parent->parent->parent->marker = DEFAULT_MARKER;
+
+    // get the flag of the new wlc & wrc
+    // TODO: this will always be valid because of Spacing Rule
+    // which means others may hold markers on them, but no flags on them
+    w->left_child->flag = true;
+    w->right_child->flag = true;
+
+    // new local area
+    nodes_own_flag.clear();
+    nodes_own_flag.push_back(x);
+    nodes_own_flag.push_back(x->parent);
+    nodes_own_flag.push_back(w);
+    nodes_own_flag.push_back(w->left_child);
+    nodes_own_flag.push_back(w->right_child);
+}
+
+/**
+ * fix the side effect of delete case 3 - mirror case
+ * 1. adjust the local area of the process that has done the rotation
+ * 2. move any relocated markers from other processes to where 
+ *    they belong after the rotation
+ */
+void fix_up_case3_r(tree_node *x, tree_node *w)
+{
+    tree_node *oldw = w->left_child->left_child;
+    tree_node *oldwlc = oldw->left_child;
+
+    // clear all the markers within old local area
+    for (auto node : nodes_own_flag)
+        node->marker = DEFAULT_MARKER;
+
+    // get the flag of the new wlc & wrc
+    // TODO: this will always be valid because of Spacing Rule
+    // which means others may hold markers on them, but no flags on them
+    w->right_child->flag = true;
+    oldwlc->flag = false;
+
+    // new local area
+    nodes_own_flag.clear();
+    nodes_own_flag.push_back(x);
+    nodes_own_flag.push_back(x->parent);
+    nodes_own_flag.push_back(w);
+    nodes_own_flag.push_back(oldw);
+    nodes_own_flag.push_back(w->right_child);
+}
+
+/************************ insert ************************/
 /**
  * TODO: ?
  */
@@ -647,21 +1020,9 @@ bool is_in(tree_node *target_node, move_up_struct *target_move_up_struct)
         return false;
     }
     
-    if (target_move_up_struct->pos1 == target_node)
+    for (auto node : target_move_up_struct->nodes_with_flag)
     {
-        return true;
-    }
-    if (target_move_up_struct->pos2 == target_node)
-    {
-        return true;
-    }
-    if (target_move_up_struct->pos3 == target_node)
-    {
-        return true;
-    }
-    if (target_move_up_struct->pos4 == target_node)
-    {
-        return true;
+        if (target_node == node) return true;
     }
 
     return false;

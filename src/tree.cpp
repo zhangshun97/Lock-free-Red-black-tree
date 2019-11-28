@@ -2,22 +2,12 @@
 
 #include <stdlib.h>
 
-// bool expected = false;
-
 /**
  * initialize red-black tree and return its root
  */
 tree_node *rb_init(void)
 {
-    tree_node *root;
-    root = (tree_node *)malloc(sizeof(tree_node));
-    root->color = BLACK;
-    root->value = INT32_MAX;
-    root->left_child = create_leaf_node();
-    root->right_child = create_leaf_node();
-    root->is_leaf = false;
-    root->parent = NULL;
-    root->flag = false;
+    tree_node *root = create_dummy_node();
     return root;
 }
 
@@ -228,6 +218,9 @@ void tree_insert(tree_node *root, tree_node *new_node)
  */
 void rb_insert(tree_node *root, int value)
 {
+    // init thread local nodes with flag
+    clear_local_area();
+
     tree_node *new_node;
     new_node = (tree_node *)malloc(sizeof(tree_node));
     new_node->color = RED;
@@ -366,6 +359,9 @@ void rb_insert(tree_node *root, int value)
 void rb_remove(tree_node *root, int value)
 {
 restart:
+    // init thread local nodes with flag
+    clear_local_area();
+
     tree_node *z = par_find(root, value);
     tree_node *y; // actual delete node
     if (z == NULL) return;
@@ -386,10 +382,6 @@ restart:
         goto restart; // deletion failed, try again
     }
     
-    tree_node *x = y->left_child;
-    if (y->left_child->is_leaf)
-        x = y->right_child;
-    
     // unlink y from the tree
     tree_node *replace_node = replace_parent(root, y);
     // replace the value
@@ -399,10 +391,16 @@ restart:
         z->flag = false;
     }
     
+    tree_node *new_y;
     if (y->color == BLACK) /* fixup case */
-        rb_remove_fixup(root, replace_node);
-    
-    // TODO: release flags and marker held in local area
+        new_y = rb_remove_fixup(root, replace_node);
+
+    // clear self moveUpStruct if possible
+    clear_self_moveUpStruct();
+
+    // always release markers above
+    while (!release_markers_above(new_y->parent, z))
+        ; // TODO: need spinning?
 
     dbg_printf("[Remove] node with value %d complete.\n", value);
     free_node(y);
@@ -413,7 +411,7 @@ restart:
  * when delete node and replace node are both black
  * rule 5 is violated and should be fixed
  */
-void rb_remove_fixup(tree_node *root, tree_node *node)
+tree_node *rb_remove_fixup(tree_node *root, tree_node *node)
 {
     bool done = false;
     bool did_move_up = false;
@@ -429,7 +427,9 @@ void rb_remove_fixup(tree_node *root, tree_node *node)
                 brother_node->color = BLACK;
                 node->parent->color = RED;
                 left_rotate(root, node->parent);
-                brother_node = node->parent->right_child; // must be black node
+                brother_node = node->parent->right_child; // must be black
+
+                fix_up_case1(node, brother_node);
             } // case 1 will definitely turn into case 2
 
             if (brother_node->left_child->color == BLACK &&
@@ -445,6 +445,8 @@ void rb_remove_fixup(tree_node *root, tree_node *node)
                 brother_node->color = RED;
                 right_rotate(root, brother_node);
                 brother_node = node->parent->right_child;
+
+                fix_up_case3(node, brother_node);
             }
 
             else // case 4
@@ -468,6 +470,8 @@ void rb_remove_fixup(tree_node *root, tree_node *node)
                 node->parent->color = RED;
                 right_rotate(root, node->parent);
                 brother_node = node->parent->left_child;
+
+                fix_up_case1_r(node, brother_node);
             }
 
             if (brother_node->left_child->color == BLACK &&
@@ -477,12 +481,14 @@ void rb_remove_fixup(tree_node *root, tree_node *node)
                 node = move_deleter_up(node);
             }
 
-            else if (brother_node->left_child->color == BLACK)
+            else if (brother_node->left_child->color == BLACK) // case 3
             {
                 brother_node->right_child->color = BLACK;
                 brother_node->color = RED;
                 left_rotate(root, brother_node);
                 brother_node = node->parent->left_child;
+
+                fix_up_case3_r(node, brother_node);
             }
 
             else // case 4
@@ -500,9 +506,14 @@ void rb_remove_fixup(tree_node *root, tree_node *node)
     }
 
     if (!did_move_up)
+    {
         node->color = BLACK;
+        // release flags in local area if did not move up
+        clear_local_area();
+    }
     
     dbg_printf("[Remove] fixup complete.\n");
+    return node;
 }
 
 /**
