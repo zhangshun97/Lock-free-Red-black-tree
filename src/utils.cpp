@@ -7,6 +7,37 @@
  * helper function
  ******************/
 
+void get_read_lock(tree_node *node)
+{
+    // node->read_write_lock.lock();
+    pthread_mutex_lock(&node->read_write_lock);
+}
+void get_write_lock(tree_node *node)
+{
+    // node->read_write_lock.lock();
+    pthread_mutex_lock(&node->read_write_lock);
+}
+void get_exclusive_lock(tree_node *node)
+{
+    // node->exclusive_lock.lock();
+    pthread_mutex_lock(&node->exclusive_lock);
+}
+void release_read_lock(tree_node *node)
+{
+    // node->read_write_lock.lock();
+    pthread_mutex_unlock(&node->read_write_lock);
+}
+void release_write_lock(tree_node *node)
+{
+    // node->read_write_lock.unlock();
+    pthread_mutex_unlock(&node->read_write_lock);
+}
+void release_exclusive_lock(tree_node *node)
+{
+    // node->exclusive_lock.unlock();
+    pthread_mutex_unlock(&node->exclusive_lock);
+}
+
 /**
  * show tree
  * only used for debug
@@ -293,6 +324,8 @@ tree_node* create_leaf_node(void)
     new_node->left_child = NULL;
     new_node->right_child = NULL;
     new_node->is_leaf = true;
+    pthread_mutex_init(&new_node->read_write_lock, NULL);
+    pthread_mutex_init(&new_node->exclusive_lock, NULL);
     return new_node;
 }
 
@@ -421,6 +454,24 @@ tree_node *get_right_min(tree_node *node)
     // only the value
     node->value = curr_node->value;
     return curr_node;
+}
+
+/**
+ * set child as parent's left child
+ */
+void left_child(tree_node *parent, tree_node *child)
+{
+    parent(child) = parent;
+    left(parent) = child;
+}
+
+/**
+ * set child as parent's right child
+ */
+void right_child(tree_node *parent, tree_node *child)
+{
+    parent(child) = parent;
+    right(parent) = child;
 }
 
 /**

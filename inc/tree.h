@@ -5,7 +5,13 @@
 #include <mutex>
 #include <shared_mutex>
 
-#define DEBUG
+#include <iostream>
+#include <fstream>
+#include <stdlib.h>
+#include <pthread.h>
+#include <time.h>
+
+// #define DEBUG
 #ifdef DEBUG
 #define dbg_printf(fmt, ...) printf("%s line:%d %s():" fmt, __FILE__, __LINE__, __func__, ##__VA_ARGS__)
 #else
@@ -22,8 +28,8 @@ typedef struct tree_node_t
     bool is_leaf;
 
     // lock
-    mutable std::shared_mutex read_write_lock;
-    mutable std::mutex exclusive_lock;
+    pthread_mutex_t read_write_lock;
+    pthread_mutex_t exclusive_lock;
 } tree_node;
 
 #define RED 0
@@ -75,6 +81,8 @@ tree_node *get_uncle(tree_node *node);
 tree_node *get_right_min(tree_node *node);
 int get_num_null(tree_node *node);
 tree_node *replace_parent(tree_node *root, tree_node *node);
+void left_child(tree_node *parent, tree_node *child);
+void right_child(tree_node *parent, tree_node *child);
 
 void free_node(tree_node *node);
 

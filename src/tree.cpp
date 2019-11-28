@@ -13,8 +13,12 @@ tree_node *rb_init(void)
     root->value = 0;
     root->left_child = create_leaf_node();
     root->right_child = create_leaf_node();
+    parent(left(root)) = root;
+    parent(right(root)) = root;
     root->is_leaf = false;
     root->parent = NULL;
+    pthread_mutex_init(&root->read_write_lock, NULL);
+    pthread_mutex_init(&root->exclusive_lock, NULL);
     return root;
 }
 
@@ -118,23 +122,31 @@ void tree_insert(tree_node *root, tree_node *new_node)
 {
     int value = new_node->value;
 
+    // dbg_printf("[Insert] before getting root's write lock.\n");
     get_write_lock(root);
+    // pthread_mutex_lock(&root->read_write_lock);
+    dbg_printf("[Insert] get root's write lock.\n");
 
     if (root->left_child->is_leaf)
     {
         free_node(root->left_child);
         root->left_child = new_node;
+        set_black(new_node);
         dbg_printf("[Insert] new node with value (%d)\n", value);
         release_write_lock(root);
         return;
     }
 
     release_write_lock(root);
+    dbg_printf("[Insert] release root's write lock.\n");
+
+    // free(new_node);
     
     // insert like any binary search tree
     tree_node *curr_node = root->left_child;
     bool found = 0;
     get_write_lock(curr_node);
+    dbg_printf("[Insert] get write lock of %lu.\n", (unsigned long)curr_node);
     tree_node *locked_node = curr_node;
     while (!curr_node->is_leaf && !found)
     {
@@ -168,15 +180,263 @@ void tree_insert(tree_node *root, tree_node *new_node)
             found = 1;
         }
 
+        dbg_printf("curr_node: %lu\n", (unsigned long) curr_node);
+
         if (is_black(curr_node) && is_black(parent) && parent != locked_node)
         {
             get_write_lock(parent);
+            dbg_printf("[Insert] get write lock of %lu.\n", (unsigned long)parent);
             release_write_lock(locked_node);
+            dbg_printf("[Insert] release write lock of %lu.\n", (unsigned long)locked_node);
             locked_node = parent;
         }
     }
 
-    dbg_printf("[Insert] failed\n");
+    if (!found) /* curr_node is a leaf */
+    {
+        get_exclusive_lock(curr_node);
+        color(curr_node) = RED;
+        curr_node->value = value;
+        curr_node->is_leaf = false;
+        left(curr_node) = create_leaf_node();
+        right(curr_node) = create_leaf_node();
+        parent(left(curr_node)) = curr_node;
+        parent(right(curr_node)) = curr_node;
+        set_red(curr_node);
+        release_exclusive_lock(curr_node);
+        while(curr_node != root->left_child && is_red(parent(curr_node)))
+        {
+            tree_node *parent = parent(curr_node);
+            tree_node *gparent = parent(parent);
+            tree_node *aunt = NULL;
+            if (parent == left(gparent))
+            {
+                aunt = right(gparent);
+                if (is_red(aunt))
+                {
+                    set_black(aunt);
+                    set_black(parent);
+                    set_red(gparent);
+                    curr_node = gparent;
+                }
+                else if (curr_node == left(parent))
+                {
+                    set_black(parent);
+                    set_red(gparent);
+                    tree_node *sister = right(parent);
+
+                    // Perform rotation
+                    if (gparent == root->left_child)
+                    {   /* need to change root */
+                        get_exclusive_lock(gparent);
+                        get_exclusive_lock(parent);
+                        get_exclusive_lock(sister);
+
+                        root->left_child = parent;
+                        parent(parent) = root;
+                        right_child(parent, gparent);
+                        left_child(gparent, sister);
+
+                        release_exclusive_lock(sister);
+                        release_exclusive_lock(parent);
+                        release_exclusive_lock(gparent);
+                    }
+                    else
+                    {   /* no need to change root */
+                        tree_node *ggparent = parent(gparent);
+                        get_exclusive_lock(ggparent);
+                        get_exclusive_lock(gparent);
+                        get_exclusive_lock(parent);
+                        get_exclusive_lock(sister);
+                        if (gparent == left(ggparent))
+                        {
+                            left_child(ggparent, parent);
+                        }
+                        else
+                        {
+                            right_child(ggparent, parent);
+                        }
+                        right_child(parent, gparent);
+                        left_child(gparent, sister);
+
+                        release_exclusive_lock(sister);
+                        release_exclusive_lock(parent);
+                        release_exclusive_lock(gparent);
+                        release_exclusive_lock(ggparent);
+                    }
+                }
+                else
+                {   /* curr_node is right child */
+                    set_black(curr_node);
+                    set_red(gparent);
+                    tree_node *left = left(curr_node), *right = right(curr_node);
+                    if (gparent == root->left_child)
+                    {   /* need to change root */
+                        get_exclusive_lock(gparent);
+                        get_exclusive_lock(parent);
+                        get_exclusive_lock(curr_node);
+                        get_exclusive_lock(left);
+                        get_exclusive_lock(right);
+
+                        root->left_child = curr_node;
+                        left_child(curr_node, parent);
+                        right_child(curr_node, gparent);
+                        right_child(parent, left);
+                        left_child(gparent, right);
+
+                        release_exclusive_lock(right);
+                        release_exclusive_lock(left);
+                        release_exclusive_lock(curr_node);
+                        release_exclusive_lock(parent);
+                        release_exclusive_lock(gparent);
+                    }
+                    else
+                    {   /* no need to change root */
+                        tree_node *ggparent = parent(gparent);
+                        get_exclusive_lock(ggparent);
+                        get_exclusive_lock(gparent);
+                        get_exclusive_lock(parent);
+                        get_exclusive_lock(curr_node);
+                        get_exclusive_lock(left);
+                        get_exclusive_lock(right);
+
+                        if (gparent == left(ggparent))
+                        {
+                            left_child(ggparent, curr_node);
+                        }
+                        else
+                        {
+                            right_child(ggparent, curr_node);
+                        }
+                        left_child(curr_node, parent);
+                        right_child(curr_node, gparent);
+                        right_child(parent, left);
+                        left_child(gparent, right);
+
+                        release_exclusive_lock(right);
+                        release_exclusive_lock(left);
+                        release_exclusive_lock(curr_node);
+                        release_exclusive_lock(parent);
+                        release_exclusive_lock(gparent);
+                        release_exclusive_lock(ggparent);
+                    }
+                }
+            }
+            else
+            {
+                aunt = left(gparent);
+                if (is_red(aunt))
+                {
+                    set_black(aunt);
+                    set_black(parent);
+                    set_red(gparent);
+                    curr_node = gparent;
+                }
+                else if (curr_node == right(parent))
+                {
+                    set_black(parent);
+                    set_red(gparent);
+                    tree_node *sister = left(parent);
+                    if (gparent == root->left_child)
+                    {
+                        get_exclusive_lock(gparent);
+                        get_exclusive_lock(parent);
+                        get_exclusive_lock(sister);
+                        root->left_child = parent;
+                        left_child(parent, gparent);
+                        right_child(gparent, sister);
+                        release_exclusive_lock(sister);
+                        release_exclusive_lock(parent);
+                        release_exclusive_lock(gparent);
+                    }
+                    else
+                    {
+                        tree_node *ggparent = parent(gparent);
+                        get_exclusive_lock(ggparent);
+                        get_exclusive_lock(gparent);
+                        get_exclusive_lock(parent);
+                        get_exclusive_lock(sister);
+                        if (gparent == left(ggparent))
+                        {
+                            left_child(ggparent, parent);
+                        }
+                        else
+                        {
+                            right_child(ggparent, parent);
+                        }
+                        left_child(parent, gparent);
+                        right_child(gparent, sister);
+
+                        release_exclusive_lock(sister);
+                        release_exclusive_lock(parent);
+                        release_exclusive_lock(gparent);
+                        release_exclusive_lock(ggparent);
+                    }
+                }
+                else
+                {   /* node is left child */
+                    set_black(curr_node);
+                    set_red(gparent);
+                    tree_node *left = left(curr_node);
+                    tree_node *right = right(curr_node);
+                    if (gparent == root->left_child)
+                    {
+                        get_exclusive_lock(gparent);
+                        get_exclusive_lock(parent);
+                        get_exclusive_lock(curr_node);
+                        get_exclusive_lock(left);
+                        get_exclusive_lock(right);
+
+                        root->left_child = curr_node;
+                        right_child(curr_node, parent);
+                        left_child(curr_node, gparent);
+                        left_child(parent, right);
+                        right_child(gparent, left);
+
+                        release_exclusive_lock(right);
+                        release_exclusive_lock(left);
+                        release_exclusive_lock(curr_node);
+                        release_exclusive_lock(parent);
+                        release_exclusive_lock(gparent);
+                    }
+                    else
+                    {   /* no need to change root */
+                        tree_node *ggparent = parent(gparent);
+                        get_exclusive_lock(ggparent);
+                        get_exclusive_lock(gparent);
+                        get_exclusive_lock(parent);
+                        get_exclusive_lock(curr_node);
+                        get_exclusive_lock(left);
+                        get_exclusive_lock(right);
+
+                        if (gparent == left(ggparent))
+                        {
+                            left_child(ggparent, curr_node);
+                        }
+                        else
+                        {
+                            right_child(ggparent, curr_node);
+                        }
+                        right_child(curr_node, parent);
+                        left_child(curr_node, gparent);
+                        left_child(parent, right);
+                        right_child(gparent, left);
+                        
+                        release_exclusive_lock(right);
+                        release_exclusive_lock(left);
+                        release_exclusive_lock(curr_node);
+                        release_exclusive_lock(parent);
+                        release_exclusive_lock(gparent);
+                        release_exclusive_lock(ggparent);
+                    }
+                }
+            }
+        }
+    }
+
+    set_black(root->left_child);
+    release_write_lock(locked_node);
+    dbg_printf("[Insert] Completed.\n");
 }
 
 /**
@@ -191,11 +451,16 @@ void rb_insert(tree_node *root, int value)
     new_node->value = value;
     new_node->left_child = create_leaf_node();
     new_node->right_child = create_leaf_node();
+    parent(left(new_node)) = new_node;
+    parent(right(new_node)) = new_node;
     new_node->is_leaf = false;
     new_node->parent = NULL;
+    pthread_mutex_init(&new_node->read_write_lock, NULL);
+    pthread_mutex_init(&new_node->exclusive_lock, NULL);
 
     tree_insert(root, new_node); // normal insert
 
+    return;
     tree_node *curr_node = new_node;
     tree_node *parent, *uncle;
 
