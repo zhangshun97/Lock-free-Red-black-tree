@@ -62,8 +62,7 @@ void show_tree(tree_node *root);
 bool check_tree(tree_node *root);
 bool check_tree_dfs(tree_node *root);
 
-// bool is_root(tree_node *root, tree_node *node);
-bool is_root(tree_node *node);
+bool is_root(tree_node *root, tree_node *node);
 bool is_left(tree_node *node);
 
 tree_node *get_remove_ndoe(tree_node *node);

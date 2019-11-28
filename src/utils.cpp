@@ -291,9 +291,9 @@ bool check_tree_dfs(tree_node *root)
 /**
  * true if node is the root node, aka has a null parent
  */
-bool is_root(tree_node *node)
+bool is_root(tree_node *root, tree_node *node)
 {
-    if (node->parent == NULL)
+    if (node->parent == root)
     {
         return true;
     }
@@ -338,10 +338,11 @@ tree_node *replace_parent(tree_node *root, tree_node *node)
         free_node(node->right_child);
     }
     
-    if (is_root(node))
+    if (is_root(root, node))
     {
-        child->parent = NULL;
+        child->parent = root;
         root->left_child = child;
+        node->parent = NULL;
     }
     
     else if (is_left(node))

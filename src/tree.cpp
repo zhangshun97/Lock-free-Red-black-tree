@@ -7,7 +7,27 @@
  */
 tree_node *rb_init(void)
 {
+    tree_node *dummy1 = create_dummy_node();
+    tree_node *dummy2 = create_dummy_node();
+    tree_node *dummy3 = create_dummy_node();
+    tree_node *dummy4 = create_dummy_node();
+    tree_node *dummy5 = create_dummy_node();
+    tree_node *dummy_sibling = create_dummy_node();
     tree_node *root = create_dummy_node();
+
+    dummy_sibling->parent = root;
+    root->parent = dummy5;
+    dummy5->parent = dummy4;
+    dummy4->parent = dummy3;
+    dummy3->parent = dummy2;
+    dummy2->parent = dummy1;
+
+    dummy1->left_child = dummy2;
+    dummy2->left_child = dummy3;
+    dummy3->left_child = dummy4;
+    dummy4->left_child = dummy5;
+    dummy5->left_child = root;
+    root->right_child = dummy_sibling;
     return root;
 }
 
@@ -31,11 +51,7 @@ void left_rotate(tree_node *root, tree_node *node)
 
     tree_node *right_child = node->right_child;
     right_child->parent = node->parent;
-    if (is_root(node))
-    {
-        root->left_child = right_child;
-    }
-    else if (is_left(node))
+    if (is_left(node))
     {
         node->parent->left_child = right_child;
     }
@@ -77,11 +93,7 @@ void right_rotate(tree_node *root, tree_node *node)
 
     tree_node *left_child = node->left_child;
     left_child->parent = node->parent;
-    if (is_root(node))
-    {
-        root->left_child = left_child;
-    }
-    else if (is_left(node))
+    if (is_left(node))
     {
         node->parent->left_child = left_child;
     }
@@ -124,6 +136,7 @@ void tree_insert(tree_node *root, tree_node *new_node)
         new_node->flag = true;
         dbg_printf("[FLAG] set flag of %lu\n", (unsigned long)new_node);
         root->left_child = new_node;
+        new_node->parent = root;
         dbg_printf("[Insert] new node with value (%d)\n", value);
         dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)root);
         root->flag = false;
@@ -259,7 +272,7 @@ void rb_insert(tree_node *root, int value)
     local_area.push_back(uncle);
     local_area.push_back(grandparent);
 
-    if (is_root(curr_node))
+    if (is_root(root, curr_node))
     {
         curr_node->color = BLACK;
         for (auto node:local_area)
@@ -276,7 +289,7 @@ void rb_insert(tree_node *root, int value)
 
     while (true)
     {
-        if (is_root(curr_node)) // trivial case 1
+        if (is_root(root, curr_node)) // trivial case 1
         {
             curr_node->color = BLACK;
             break;
@@ -416,7 +429,7 @@ tree_node *rb_remove_fixup(tree_node *root, tree_node *node)
     bool done = false;
     bool did_move_up = false;
 
-    while (!is_root(node) && node->color == BLACK && !done)
+    while (!is_root(root, node) && node->color == BLACK && !done)
     {
         tree_node *brother_node;
         if (is_left(node))
