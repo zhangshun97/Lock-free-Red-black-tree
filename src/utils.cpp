@@ -32,9 +32,16 @@ tree_node *create_dummy_node(void)
  */
 void show_tree(tree_node *root)
 {
-    dbg_printf("[root] pointer: %lu flag:%d\n", (unsigned long) root, (int) root->flag);
+    printf("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+    printf("[root] pointer: 0x%lx flag:%d\n", (unsigned long) root, (int) root->flag);
 
     tree_node *root_node = root->left_child;
+    if (root_node->is_leaf)
+    {
+        printf("Empty Tree.\n");
+        return;
+    }
+    
     std::vector<tree_node *> frontier;
     frontier.clear();
     frontier.push_back(root_node);
@@ -45,7 +52,7 @@ void show_tree(tree_node *root)
         tree_node *left_child = cur_node->left_child;
         tree_node *right_child = cur_node->right_child;
 
-        dbg_printf("pointer: %lu flag:%d ", (unsigned long) cur_node, (int) cur_node->flag);
+        printf("pointer: 0x%lx flag:%d marker: %d\n", (unsigned long) cur_node, (int) cur_node->flag, cur_node->marker);
 
         if (cur_node->color == BLACK)
             printf("(%d) Black\n", cur_node->value);
@@ -55,30 +62,100 @@ void show_tree(tree_node *root)
         frontier.pop_back();
         if (left_child->is_leaf)
         {
-            dbg_printf("    left null flag:%d pointer: %lu\n", (int)left_child->flag, (unsigned long)left_child);
+            printf("    left null flag:%d pointer: 0x%lx\n", (int)left_child->flag, (unsigned long)left_child);
         }
         else
         {
             if (left_child->color == BLACK)
-                dbg_printf("    (%d) Black\n", left_child->value);
+                printf("    (%d) Black\n", left_child->value);
             else
-                dbg_printf("    (%d) Red\n", left_child->value);
+                printf("    (%d) Red\n", left_child->value);
             frontier.push_back(left_child);
         }
 
         if (right_child->is_leaf)
         {
-            dbg_printf("    right null flag:%d pointer: %lu\n", (int)right_child->flag, (unsigned long)right_child);
+            printf("    right null flag:%d pointer: 0x%lx\n", (int)right_child->flag, (unsigned long)right_child);
         }
         else
         {
             if (right_child->color == BLACK)
-                dbg_printf("    (%d) Black\n", right_child->value);
+                printf("    (%d) Black\n", right_child->value);
             else
-                dbg_printf("    (%d) Red\n", right_child->value);
+                printf("    (%d) Red\n", right_child->value);
             frontier.push_back(right_child);
         }
     }
+    printf("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+}
+
+/**
+ * show tree, output in file
+ * only used for debug
+ * because only small tree can be shown
+ */
+void show_tree_file(tree_node *root)
+{
+    char *file = "./show_tree.txt";
+    FILE *fd = fopen(file, "w");
+    
+    fprintf(fd, "\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+    fprintf(fd, "[root] pointer: 0x%lx flag:%d\n", (unsigned long)root, (int)root->flag);
+
+    tree_node *root_node = root->left_child;
+    if (root_node->is_leaf)
+    {
+        fprintf(fd, "Empty Tree.\n");
+        fclose(fd);
+        return;
+    }
+
+    std::vector<tree_node *> frontier;
+    frontier.clear();
+    frontier.push_back(root_node);
+
+    while (frontier.size() > 0)
+    {
+        tree_node *cur_node = frontier.back();
+        tree_node *left_child = cur_node->left_child;
+        tree_node *right_child = cur_node->right_child;
+
+        fprintf(fd, "pointer: 0x%lx flag:%d marker: %d\n", (unsigned long)cur_node, (int)cur_node->flag, cur_node->marker);
+
+        if (cur_node->color == BLACK)
+            fprintf(fd, "(%d) Black\n", cur_node->value);
+        else
+            fprintf(fd, "(%d) Red\n", cur_node->value);
+
+        frontier.pop_back();
+        if (left_child->is_leaf)
+        {
+            fprintf(fd, "    left null flag:%d pointer: 0x%lx\n", (int)left_child->flag, (unsigned long)left_child);
+        }
+        else
+        {
+            if (left_child->color == BLACK)
+                fprintf(fd, "    (%d) Black\n", left_child->value);
+            else
+                fprintf(fd, "    (%d) Red\n", left_child->value);
+            frontier.push_back(left_child);
+        }
+
+        if (right_child->is_leaf)
+        {
+            fprintf(fd, "    right null flag:%d pointer: 0x%lx\n", (int)right_child->flag, (unsigned long)right_child);
+        }
+        else
+        {
+            if (right_child->color == BLACK)
+                fprintf(fd, "    (%d) Black\n", right_child->value);
+            else
+                fprintf(fd, "    (%d) Red\n", right_child->value);
+            frontier.push_back(right_child);
+        }
+    }
+    fprintf(fd, "\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+    fclose(fd);
 }
 
 /**
@@ -357,6 +434,7 @@ tree_node *replace_parent(tree_node *root, tree_node *node)
         node->parent->right_child = child;
     }
 
+    dbg_printf("[Remove] unlink complete.\n");
     return child;
 }
 

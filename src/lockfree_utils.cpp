@@ -16,26 +16,50 @@ pthread_mutex_t *move_up_lock_list = NULL;
 
 /* thread-local variables */
 thread_local vector<tree_node *> nodes_own_flag;
+thread_local long lock_index;
 
 /**
  * initialize the lock list for moveUpStruct list
  */
-pthread_mutex_t *move_up_lock_init(int num_processes)
+void move_up_lock_init(int num_processes)
 {
-    pthread_mutex_t *move_up_lock_list =
+    move_up_lock_list =
         (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t) * num_processes);
     for (int i = 0; i < num_processes; i++)
     {
         pthread_mutex_init(&move_up_lock_list[i], NULL);
     }
-    return move_up_lock_list;
+}
+
+/**
+ * initialize the moveUpStruct list for each thread
+ */
+void move_up_list_init(int num_processes)
+{
+    move_up_list = new move_up_struct[num_processes];
+    for (int i = 0; i < num_processes; i++)
+    {
+        move_up_list[i].goal_node = NULL;
+        move_up_list[i].nodes_with_flag.clear();
+        move_up_list[i].other_close_process_TID = -1;
+        move_up_list[i].valid = false;
+    }
+}
+
+/**
+ * cannot find a 'extern' way to use thread_local variables
+ * across files
+ */
+void thread_lock_index_init(long i)
+{
+    lock_index = i;
 }
 
 /**
  * clear local area
  */
 void clear_local_area(void)
-{
+{   
     for (auto node : nodes_own_flag)
         node->flag = false;
     nodes_own_flag.clear();
@@ -199,15 +223,18 @@ bool apply_move_up_rule(tree_node *x, tree_node *w)
  */
 void clear_self_moveUpStruct(void)
 {
-    int self = (int) pthread_self();
-    pthread_mutex_lock(&move_up_lock_list[self]);
-    move_up_struct *moveUpStruct = &move_up_list[self];
-    if (!moveUpStruct->valid) return;
+    pthread_mutex_lock(&move_up_lock_list[lock_index]);
+    move_up_struct *moveUpStruct = &move_up_list[lock_index];
+    if (!moveUpStruct->valid) 
+    {
+        pthread_mutex_unlock(&move_up_lock_list[lock_index]);
+        return;
+    }
     for (auto node : moveUpStruct->nodes_with_flag)
         node->flag = false;
     moveUpStruct->nodes_with_flag.clear();
     moveUpStruct->valid = false;
-    pthread_mutex_unlock(&move_up_lock_list[self]);
+    pthread_mutex_unlock(&move_up_lock_list[lock_index]);
 }
 
 /**
@@ -392,10 +419,9 @@ bool get_flags_for_markers(tree_node *start, move_up_struct *moveUpStruct,
  * @params:
  *      start - parent node of the actual node to be deleted
  */
-bool get_markers_above(tree_node *start)
+bool get_markers_above(tree_node *start, bool release)
 {
-    int self = (int)pthread_self();
-    move_up_struct *moveUpStruct = &move_up_list[self];
+    move_up_struct *moveUpStruct = &move_up_list[lock_index];
     bool expect;
 
     // Now get marker(s) above
@@ -409,7 +435,7 @@ bool get_markers_above(tree_node *start)
 
     if ((pos1 != start->parent) 
         && (!spacing_rule_is_satisfied(pos1, NULL,
-                                       self, moveUpStruct)))
+                                       lock_index, moveUpStruct)))
         return false;
 
     pos2 = pos1->parent;
@@ -423,7 +449,7 @@ bool get_markers_above(tree_node *start)
 
     if ((pos2 != pos1->parent) 
         && (!spacing_rule_is_satisfied(pos2, NULL,
-                                       self, moveUpStruct)))
+                                       lock_index, moveUpStruct)))
     {
         release_flag(moveUpStruct, false, pos1);
         return false;
@@ -441,7 +467,7 @@ bool get_markers_above(tree_node *start)
 
     if ((pos3 != pos2->parent) 
         && (!spacing_rule_is_satisfied(pos3, NULL,
-                                       self, moveUpStruct)))
+                                       lock_index, moveUpStruct)))
     {
         release_flag(moveUpStruct, false, pos1);
         release_flag(moveUpStruct, false, pos2);
@@ -461,7 +487,7 @@ bool get_markers_above(tree_node *start)
 
     if ((pos4 != pos3->parent) 
         && (!spacing_rule_is_satisfied(pos4, NULL,
-                                       self, moveUpStruct)))
+                                       lock_index, moveUpStruct)))
     {
         release_flag(moveUpStruct, false, pos1);
         release_flag(moveUpStruct, false, pos2);
@@ -470,11 +496,19 @@ bool get_markers_above(tree_node *start)
     }
 
     // successfully get the four markers
-    pos1->marker = self;
-    pos2->marker = self;
-    pos3->marker = self;
-    pos4->marker = self;
+    pos1->marker = lock_index;
+    pos2->marker = lock_index;
+    pos3->marker = lock_index;
+    pos4->marker = lock_index;
 
+    if (release)
+    {
+        release_flag(moveUpStruct, false, pos1);
+        release_flag(moveUpStruct, false, pos2);
+        release_flag(moveUpStruct, false, pos3);
+        release_flag(moveUpStruct, false, pos4);
+    }
+    
     return true;
 }
 
@@ -483,9 +517,6 @@ bool get_markers_above(tree_node *start)
  */
 bool get_flags_and_markers_above(tree_node *start, int numAdditional)
 {
-    // get markers first
-    if (!get_markers_above(start)) return false;
-    
     /**
      * Check for a moveUpStruct provided by another process (due to 
      * Move-Up rule processing) and set ’PIDtoIgnore’ to the PID 
@@ -493,12 +524,21 @@ bool get_flags_and_markers_above(tree_node *start, int numAdditional)
      * if a node is in the moveUpStruct. 
      * Start by getting flags on the four nodes we have markers on.
      */
-    int self = (int) pthread_self();
-    move_up_struct *moveUpStruct = &move_up_list[self];
-    bool expect;
-    tree_node *pos1, *pos2, *pos3, *pos4;
-    if (!get_flags_for_markers(start, moveUpStruct, &pos1, &pos2, &pos3, &pos4))
+
+    // get markers first and do not release flag
+    if (!get_markers_above(start, false))
         return false;
+
+    move_up_struct *moveUpStruct = &move_up_list[lock_index];
+    bool expect;
+    tree_node *pos1 = start->parent;
+    tree_node *pos2 = pos1->parent;
+    tree_node *pos3 = pos2->parent;
+    tree_node *pos4 = pos3->parent;
+    // no need of this function
+    // if (!get_flags_for_markers(start, moveUpStruct, &pos1, &pos2, &pos3, &pos4))
+    //     return false;
+
     // Now get additional marker(s) above
     tree_node *firstnew = pos4->parent;
     expect = false;
@@ -555,9 +595,9 @@ bool get_flags_and_markers_above(tree_node *start, int numAdditional)
         }
     }
 
-    firstnew->marker = self;
+    firstnew->marker = lock_index;
     if (numAdditional == 2)
-        secondnew->marker = self;
+        secondnew->marker = lock_index;
 
     // release the four topmost flags acquired to extend markers.
     // This leaves flags on nodes now in the new local area.
@@ -584,7 +624,6 @@ bool get_flags_and_markers_above(tree_node *start, int numAdditional)
  */
 bool release_markers_above(tree_node *start, tree_node *z)
 {
-    int self = (int) pthread_self();
     bool expect;
     
     // release 4 marker(s) above start node
@@ -646,10 +685,10 @@ bool release_markers_above(tree_node *start, tree_node *z)
     }
 
     // release these markers
-    if (pos1->marker == self) pos1->marker = DEFAULT_MARKER;
-    if (pos2->marker == self) pos2->marker = DEFAULT_MARKER;
-    if (pos3->marker == self) pos3->marker = DEFAULT_MARKER;
-    if (pos4->marker == self) pos4->marker = DEFAULT_MARKER;
+    if (pos1->marker == lock_index) pos1->marker = DEFAULT_MARKER;
+    if (pos2->marker == lock_index) pos2->marker = DEFAULT_MARKER;
+    if (pos3->marker == lock_index) pos3->marker = DEFAULT_MARKER;
+    if (pos4->marker == lock_index) pos4->marker = DEFAULT_MARKER;
     
     // release flags
     pos1->flag = false;
@@ -666,10 +705,9 @@ bool release_markers_above(tree_node *start, tree_node *z)
  */
 tree_node *move_deleter_up(tree_node *oldx)
 {
-    int self = (int) pthread_self();
     // here is the only place to lock the struct
-    pthread_mutex_lock(&move_up_lock_list[self]);
-    move_up_struct *moveUpStruct = &move_up_list[self];
+    pthread_mutex_lock(&move_up_lock_list[lock_index]);
+    move_up_struct *moveUpStruct = &move_up_list[lock_index];
     bool expect;
 
     // TODO: check for a moveUpStruct from another process
@@ -721,7 +759,16 @@ tree_node *move_deleter_up(tree_node *oldx)
     release_flag(moveUpStruct, true, oldwlc);
     release_flag(moveUpStruct, true, oldwrc);
 
-    pthread_mutex_unlock(&move_up_lock_list[self]);
+    pthread_mutex_unlock(&move_up_lock_list[lock_index]);
+
+    // new local area
+    nodes_own_flag.clear();
+    nodes_own_flag.push_back(newx);
+    nodes_own_flag.push_back(neww);
+    nodes_own_flag.push_back(newp);
+    nodes_own_flag.push_back(newwlc);
+    nodes_own_flag.push_back(newwrc);
+
     return newx;
 }
 
@@ -737,7 +784,7 @@ void fix_up_case1(tree_node *x, tree_node *w)
 {
     tree_node *oldw = x->parent->parent;
     tree_node *oldwlc = x->parent->right_child;
-    int self = (int)pthread_self();
+    tree_node *oldwrc = oldw->right_child;
 
     // clear markers
     if (oldw->marker != DEFAULT_MARKER && oldw->marker == oldwlc->marker)
@@ -746,8 +793,9 @@ void fix_up_case1(tree_node *x, tree_node *w)
     }
 
     // set w's marker before releasing its flag
-    oldw->marker = self;
+    oldw->marker = lock_index;
     oldw->flag = false;
+    oldwrc->flag = false;
 
     // release the fifth marker
     oldw->parent->parent->parent->parent->marker = DEFAULT_MARKER;
@@ -780,7 +828,7 @@ void fix_up_case1(tree_node *x, tree_node *w)
  */
 void fix_up_case3(tree_node *x, tree_node *w)
 {
-    tree_node *oldw = w->right_child->right_child;
+    tree_node *oldw = w->right_child;
     tree_node *oldwrc = oldw->right_child;
 
     // clear all the markers within old local area
@@ -812,8 +860,8 @@ void fix_up_case3(tree_node *x, tree_node *w)
 void fix_up_case1_r(tree_node *x, tree_node *w)
 {
     tree_node *oldw = x->parent->parent;
+    tree_node *oldwlc = oldw->left_child;
     tree_node *oldwrc = x->parent->left_child;
-    int self = (int)pthread_self();
 
     // clear markers
     if (oldw->marker != DEFAULT_MARKER && oldw->marker == oldwrc->marker)
@@ -822,8 +870,9 @@ void fix_up_case1_r(tree_node *x, tree_node *w)
     }
 
     // set w's marker before releasing its flag
-    oldw->marker = self;
+    oldw->marker = lock_index;
     oldw->flag = false;
+    oldwlc->flag = false;
 
     // release the fifth marker
     oldw->parent->parent->parent->parent->marker = DEFAULT_MARKER;
@@ -851,7 +900,7 @@ void fix_up_case1_r(tree_node *x, tree_node *w)
  */
 void fix_up_case3_r(tree_node *x, tree_node *w)
 {
-    tree_node *oldw = w->left_child->left_child;
+    tree_node *oldw = w->left_child;
     tree_node *oldwlc = oldw->left_child;
 
     // clear all the markers within old local area
@@ -888,19 +937,19 @@ bool setup_local_area_for_insert(tree_node *x)
     bool expected = false;
     if (!parent->flag.compare_exchange_weak(expected, true))
     {
-        dbg_printf("[FLAG] failed getting flag of %lu\n", 
+        dbg_printf("[FLAG] failed getting flag of 0x%lx\n", 
                    (unsigned long)parent);
         return false;
     }
 
-    dbg_printf("[FLAG] get flag of %lu\n", (unsigned long)parent);
+    dbg_printf("[FLAG] get flag of 0x%lx\n", (unsigned long)parent);
 
     // abort when parent of x changes
     if (parent != x->parent)
     {
-        dbg_printf("[FLAG] parent changed from %lu to %lu\n", 
+        dbg_printf("[FLAG] parent changed from %lu to 0x%lx\n", 
                    (unsigned long)parent, (unsigned long)parent);
-        dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)parent);
+        dbg_printf("[FLAG] release flag of 0x%lx\n", (unsigned long)parent);
         parent->flag = false;
         return false;
     }
@@ -917,13 +966,13 @@ bool setup_local_area_for_insert(tree_node *x)
     expected = false;
     if (!uncle->flag.compare_exchange_weak(expected, true))
     {
-        dbg_printf("[FLAG] failed getting flag of %lu\n", (unsigned long)uncle);
-        dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)x->parent);
+        dbg_printf("[FLAG] failed getting flag of 0x%lx\n", (unsigned long)uncle);
+        dbg_printf("[FLAG] release flag of 0x%lx\n", (unsigned long)x->parent);
         x->parent->flag = false;
         return false;
     }
 
-    dbg_printf("[FLAG] get flag of %lu\n", (unsigned long)uncle);
+    dbg_printf("[FLAG] get flag of 0x%lx\n", (unsigned long)uncle);
 
     // now the process has the flags of x, x's parent and x's uncle
     return true;
@@ -956,11 +1005,11 @@ tree_node *move_inserter_up(tree_node *oldx, vector<tree_node *> &local_area)
         expected = false;
         if (!newp->flag.compare_exchange_weak(expected, true))
         {
-            dbg_printf("[FLAG] failed getting flag of %lu\n", (unsigned long)newp);
+            dbg_printf("[FLAG] failed getting flag of 0x%lx\n", (unsigned long)newp);
             continue;
         }
 
-        dbg_printf("[FLAG] get flag of %lu\n", (unsigned long)newp);
+        dbg_printf("[FLAG] get flag of 0x%lx\n", (unsigned long)newp);
 
         newgp = newp->parent;
         if (newgp == NULL)
@@ -968,13 +1017,13 @@ tree_node *move_inserter_up(tree_node *oldx, vector<tree_node *> &local_area)
         expected = false;
         if (!newgp->flag.compare_exchange_weak(expected, true))
         {
-            dbg_printf("[FLAG] failed getting flag of %lu\n", (unsigned long)newgp);
-            dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)newp);
+            dbg_printf("[FLAG] failed getting flag of 0x%lx\n", (unsigned long)newgp);
+            dbg_printf("[FLAG] release flag of 0x%lx\n", (unsigned long)newp);
             newp->flag = false;
             continue;
         }
 
-        dbg_printf("[FLAG] get flag of %lu\n", (unsigned long)newgp);
+        dbg_printf("[FLAG] get flag of 0x%lx\n", (unsigned long)newgp);
 
         if (newp == newgp->left_child)
         {
@@ -988,15 +1037,15 @@ tree_node *move_inserter_up(tree_node *oldx, vector<tree_node *> &local_area)
         expected = false;
         if (!newuncle->flag.compare_exchange_weak(expected, true))
         {
-            dbg_printf("[FLAG] failed getting flag of %lu\n", (unsigned long)newuncle);
-            dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)newgp);
-            dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)newp);
+            dbg_printf("[FLAG] failed getting flag of 0x%lx\n", (unsigned long)newuncle);
+            dbg_printf("[FLAG] release flag of 0x%lx\n", (unsigned long)newgp);
+            dbg_printf("[FLAG] release flag of 0x%lx\n", (unsigned long)newp);
             newgp->flag = false;
             newp->flag = false;
             continue;
         }
 
-        dbg_printf("[FLAG] get flag of %lu\n", (unsigned long)newuncle);
+        dbg_printf("[FLAG] get flag of 0x%lx\n", (unsigned long)newuncle);
 
         // now the process has the flags of newp, newgp and newuncle
         break;
@@ -1088,7 +1137,9 @@ restart:
 }
 
 /**
- * find a node's successor by getting flag hand over hand
+ * find a node's successor on the left
+ * already make sure that the delete node have two non-leaf children
+ * by getting flag hand over hand
  * restart when conflict happens
  */
 tree_node *par_find_successor(tree_node *delete_node)
@@ -1098,16 +1149,13 @@ tree_node *par_find_successor(tree_node *delete_node)
     int value = delete_node->value;
 restart:
 
-    tree_node *y = delete_node;
+    tree_node *y = delete_node->right_child;
     tree_node *z = NULL;
 
-    while (!y->is_leaf)
+    while (!y->left_child->is_leaf)
     {
         z = y; // store old y
-        if (value > y->value)
-            y = y->right_child;
-        else
-            y = y->left_child;
+        y = y->left_child;
 
         expect = false;
         if (!y->flag.compare_exchange_weak(expect, true))
@@ -1115,14 +1163,10 @@ restart:
             z->flag = false; // release held flag
             goto restart;
         }
-        if (!y->is_leaf)
-            z->flag = false; // release old y's flag
-        else
-            return z; // find the successor
+        
+        z->flag = false; // release old y's flag
     }
-    // program should not reach here
-    // because if delete_node is a node with 2 nil children, 
-    // itself should be returned
-    dbg_printf("[WARNING] successor of node with value %d not found.\n", value);
-    return NULL; // node not found
+    
+    dbg_printf("[Remvove] successor of node with value %d found with value %d.\n", value, y->value);
+    return y; // successor found
 }

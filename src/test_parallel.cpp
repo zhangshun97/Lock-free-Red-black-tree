@@ -5,12 +5,15 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <time.h>
+#include <unistd.h>
 
 using namespace std;
 
 int total_size = 0, size_per_thread = 0;
 int numbers[1000001];
 tree_node *root;
+
+bool remove_dbg = false; // dbg_printf
 
 void load_data_from_txt();
 int run_multi_thread(int thread_count);
@@ -26,6 +29,8 @@ int main()
 
     // run experiments
     root = rb_init();
+    move_up_lock_init(num_processes);
+    move_up_list_init(num_processes);
     // run_multi_thread(num_processes);
     run_serial();
 
@@ -36,6 +41,8 @@ void run_serial()
 {
     struct timespec start, end;
     double elapsed_time;
+
+
 
     clock_gettime(CLOCK_MONOTONIC, &start);
     for (int i = 0; i < total_size; i++)
@@ -48,10 +55,17 @@ void run_serial()
     elapsed_time *= 1e-9;
     cout << "time taken by insert with 1 threads: " << fixed << elapsed_time << "sec" << endl;
 
+    remove_dbg = false;
+    dbg_printf("\n\n\n");
+    // show_tree(root);
+    // dbg_printf("\n\n\n");
+    // sleep(3);
+
     clock_gettime(CLOCK_MONOTONIC, &start);
     for (int i = 0; i < total_size; i++)
     {
         rb_remove(root, numbers[i]);
+        // show_tree(root);
     }
     clock_gettime(CLOCK_MONOTONIC, &end);
     elapsed_time = (end.tv_sec - start.tv_sec) * 1e9;
@@ -60,9 +74,11 @@ void run_serial()
     cout << "time taken by delete with 1 threads: " << fixed << elapsed_time << "sec" << endl;
 }
 
-void *run(void *p)
+void *run(void *i)
 {
-    int *start = (int *)p;
+    int *p = numbers + ((long)i) * size_per_thread;
+    thread_lock_index_init((long) i);
+    int *start = p;
     int count = size_per_thread;
     for (int i = 0; i < count; i++)
     {
@@ -85,9 +101,10 @@ int run_multi_thread(int thread_count)
     thread_count--; // main thread will also perform insertion
     for (int i = 0; i < thread_count; i++)
     {
-        pthread_create(&tid[i], NULL, run, numbers + (i + 1) * size_per_thread);
+        pthread_create(&tid[i], NULL, run, (void *)(i + 1));
     }
-    run(numbers);
+
+    run(0);
     for (int i = 0; i < thread_count; i++)
     {
         pthread_join(tid[i], NULL);

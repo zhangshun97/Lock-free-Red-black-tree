@@ -8,7 +8,7 @@ OBJS = $(BUILD_DIR)/tree.o \
 	$(BUILD_DIR)/utils.o \
 	$(BUILD_DIR)/lockfree_utils.o
 
-default: all
+default: test_parallel
 all: test test_parallel
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp

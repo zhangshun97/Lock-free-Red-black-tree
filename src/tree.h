@@ -6,12 +6,16 @@
 #include <vector>
 #include <atomic>
 
-// #define DEBUG
+extern thread_local long lock_index;
+extern bool remove_dbg;
+
+#define DEBUG
 #ifdef DEBUG
-#define dbg_printf(fmt, ...) do {\
-        pthread_t         self;\
-        self = pthread_self();\
-        printf("tid:%u %s line:%d %s():" fmt, (unsigned)self, __FILE__, __LINE__, __func__, ##__VA_ARGS__);} while(0)
+#define dbg_printf(fmt, ...) \
+        do {                 \
+            if (remove_dbg)  \
+                printf("T[%ld] %s line:%d %s():" fmt, lock_index, __FILE__, __LINE__, __func__, ##__VA_ARGS__); \
+        } while(0)
 
 #else
 #define dbg_printf(...)
@@ -47,6 +51,7 @@ typedef struct move_up_struct_t
 
 /* function prototypes */
 /* main functions */
+void thread_lock_index_init(long i);
 tree_node *rb_init(void);
 void right_rotate(tree_node *root, tree_node *node);
 void left_rotate(tree_node *root, tree_node *node);
@@ -58,6 +63,7 @@ tree_node *tree_search(tree_node *root, int value);
 
 /* utility functions  */
 tree_node *create_dummy_node(void);
+void show_tree_file(tree_node *root);
 void show_tree(tree_node *root);
 bool check_tree(tree_node *root);
 bool check_tree_dfs(tree_node *root);
@@ -75,11 +81,11 @@ tree_node *replace_parent(tree_node *root, tree_node *node);
 void free_node(tree_node *node);
 void clear_local_area(void);
 
-
 /* lock-free functions */
 bool is_in(tree_node *target_node, move_up_struct *target_move_up_struct);
 bool is_goal(tree_node *target_node, move_up_struct *target_move_up_struct);
-pthread_mutex_t *move_up_lock_init(int num_processes);
+void move_up_lock_init(int num_processes);
+void move_up_list_init(int num_processes);
 void release_flag(move_up_struct *target_move_up_struct, bool success,
                   tree_node *target_node);
 

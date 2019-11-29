@@ -2,6 +2,8 @@
 
 #include <stdlib.h>
 
+extern thread_local long lock_index;
+
 /**
  * initialize red-black tree and return its root
  */
@@ -127,24 +129,24 @@ void tree_insert(tree_node *root, tree_node *new_node)
     bool expected = false;
     while (!root->flag.compare_exchange_weak(expected, true));
 
-    dbg_printf("[FLAG] get flag of %lu\n", (unsigned long)root);
+    dbg_printf("[FLAG] get flag of 0x%lx\n", (unsigned long)root);
 
     // empty tree
     if (root->left_child->is_leaf)
     {
         free_node(root->left_child);
         new_node->flag = true;
-        dbg_printf("[FLAG] set flag of %lu\n", (unsigned long)new_node);
+        dbg_printf("[FLAG] set flag of 0x%lx\n", (unsigned long)new_node);
         root->left_child = new_node;
         new_node->parent = root;
         dbg_printf("[Insert] new node with value (%d)\n", value);
-        dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)root);
+        dbg_printf("[FLAG] release flag of 0x%lx\n", (unsigned long)root);
         root->flag = false;
         return;
     }
 
     // release root's flag for non-empty tree
-    dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)root);
+    dbg_printf("[FLAG] release flag of 0x%lx\n", (unsigned long)root);
     root->flag = false;
 
     restart:
@@ -154,11 +156,11 @@ void tree_insert(tree_node *root, tree_node *new_node)
     expected = false;
     if (!curr_node->flag.compare_exchange_strong(expected, true))
     {
-        dbg_printf("[FLAG] failed getting flag of %lu\n", (unsigned long)curr_node);
+        dbg_printf("[FLAG] failed getting flag of 0x%lx\n", (unsigned long)curr_node);
         
         goto restart;
     }
-    dbg_printf("[FLAG] get flag of %lu\n", (unsigned long)curr_node);
+    dbg_printf("[FLAG] get flag of 0x%lx\n", (unsigned long)curr_node);
 
     
     while (!curr_node->is_leaf)
@@ -176,19 +178,19 @@ void tree_insert(tree_node *root, tree_node *new_node)
         expected = false;
         if (!curr_node->flag.compare_exchange_weak(expected, true))
         {
-            dbg_printf("[FLAG] failed getting flag of %lu\n", (unsigned long)curr_node);
-            dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)z);
+            dbg_printf("[FLAG] failed getting flag of 0x%lx\n", (unsigned long)curr_node);
+            dbg_printf("[FLAG] release flag of 0x%lx\n", (unsigned long)z);
             z->flag = false;// release z's flag
             
             goto restart;
         }
 
-        dbg_printf("[FLAG] get flag of %lu\n", (unsigned long)curr_node);
+        dbg_printf("[FLAG] get flag of 0x%lx\n", (unsigned long)curr_node);
 
         if (!curr_node->is_leaf)
         {
             // release old curr_node's flag
-            dbg_printf("[FLAG] release flag of %lu\n", (unsigned long)z);
+            dbg_printf("[FLAG] release flag of 0x%lx\n", (unsigned long)z);
             z->flag = false;
         }
     }
@@ -205,18 +207,12 @@ void tree_insert(tree_node *root, tree_node *new_node)
     // now the local area has been setup
     // insert the node
     new_node->parent = z;
-    if (z == root)
-    {
-        free(root->left_child);
-        root->left_child = new_node;
-        new_node->parent = NULL;
-    }
-    else if (value < z->value)
+    if (value <= z->value)
     {
         free(z->left_child);
         z->left_child = new_node;
     }
-    else if (value > z->value)
+    else
     {
         free(z->right_child);
         z->right_child = new_node;
@@ -242,6 +238,8 @@ void rb_insert(tree_node *root, int value)
     new_node->right_child = create_leaf_node();
     new_node->is_leaf = false;
     new_node->parent = NULL;
+    new_node->flag = false;
+    new_node->marker = DEFAULT_MARKER;
 
     tree_insert(root, new_node); // normal insert
 
@@ -371,7 +369,9 @@ void rb_insert(tree_node *root, int value)
  */
 void rb_remove(tree_node *root, int value)
 {
+    dbg_printf("[Remove] thread %ld value %d\n", lock_index, value);
 restart:
+    dbg_printf("--- Restart ---\n");
     // init thread local nodes with flag
     clear_local_area();
 
@@ -404,16 +404,20 @@ restart:
         z->flag = false;
     }
     
-    tree_node *new_y;
+    tree_node *new_y = NULL;
     if (y->color == BLACK) /* fixup case */
         new_y = rb_remove_fixup(root, replace_node);
 
     // clear self moveUpStruct if possible
     clear_self_moveUpStruct();
+    dbg_printf("-- Clear moveUpStruct done --\n");
 
     // always release markers above
-    while (!release_markers_above(new_y->parent, z))
-        ; // TODO: need spinning?
+    if (new_y != NULL)
+    {
+        while (!release_markers_above(new_y->parent, z))
+            ; // TODO: need spinning?
+    }
 
     dbg_printf("[Remove] node with value %d complete.\n", value);
     free_node(y);
