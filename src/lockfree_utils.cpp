@@ -1249,7 +1249,6 @@ tree_node *par_find_successor(tree_node *delete_node)
         if (!y->flag.compare_exchange_weak(expect, true))
         {
             z->flag = false; // release held flag
-            // usleep(100);
             return NULL; // restart outside
         }
         
