@@ -24,11 +24,17 @@ tree_node *rb_init(void)
     dummy3->parent = dummy2;
     dummy2->parent = dummy1;
 
+    free_node(dummy1->left_child);
     dummy1->left_child = dummy2;
+    free_node(dummy2->left_child);
     dummy2->left_child = dummy3;
+    free_node(dummy3->left_child);
     dummy3->left_child = dummy4;
+    free_node(dummy4->left_child);
     dummy4->left_child = dummy5;
+    free_node(dummy5->left_child);
     dummy5->left_child = root;
+    free_node(root->right_child);
     root->right_child = dummy_sibling;
     return root;
 }
@@ -371,7 +377,6 @@ void rb_remove(tree_node *root, int value)
 {
     dbg_printf("[Remove] thread %ld value %d\n", lock_index, value);
 restart:
-    dbg_printf("--- Restart ---\n");
     // init thread local nodes with flag
     clear_local_area();
 
@@ -384,41 +389,54 @@ restart:
     else
         y = par_find_successor(z);
     
+    if (y == NULL)
+    {
+        z->flag = false;
+        goto restart;
+    }
+    
     // we now hold the flag of y(delete_node) AND of z(node)
 
-    // set up for local area delete
+    // set up for local area delete, also four markers above
     if (!setup_local_area_for_delete(y, z))
     {
         // release flags
         y->flag = false;
         if (y != z) z->flag = false;
+        usleep(100);
         goto restart; // deletion failed, try again
     }
+    dbg_printf("[Remove] actual node with value %d\n", y->value);
     
     // unlink y from the tree
     tree_node *replace_node = replace_parent(root, y);
+
     // replace the value
     if (y != z)
-    {
         z->value = y->value;
-        z->flag = false;
-    }
     
-    tree_node *new_y = NULL;
+    // release z's flag safely
+    if (!is_in_local_area(z))
+    {
+        z->flag = false;
+        dbg_printf("[Flag] release %d\n", z->value);
+    }
+
     if (y->color == BLACK) /* fixup case */
-        new_y = rb_remove_fixup(root, replace_node);
+        replace_node = rb_remove_fixup(root, replace_node, z);
+    
+    // clear markers above
+    while (!release_markers_above(replace_node->parent, z))
+        ;
+
+    // clear local area
+    if (y->color != BLACK)
+        clear_local_area();
 
     // clear self moveUpStruct if possible
     clear_self_moveUpStruct();
     dbg_printf("-- Clear moveUpStruct done --\n");
-
-    // always release markers above
-    if (new_y != NULL)
-    {
-        while (!release_markers_above(new_y->parent, z))
-            ; // TODO: need spinning?
-    }
-
+    
     dbg_printf("[Remove] node with value %d complete.\n", value);
     free_node(y);
 }
@@ -428,10 +446,12 @@ restart:
  * when delete node and replace node are both black
  * rule 5 is violated and should be fixed
  */
-tree_node *rb_remove_fixup(tree_node *root, tree_node *node)
+tree_node *rb_remove_fixup(tree_node *root, 
+                           tree_node *node,
+                           tree_node *z)
 {
     bool done = false;
-    bool did_move_up = false;
+    bool other_move_up = false;
 
     while (!is_root(root, node) && node->color == BLACK && !done)
     {
@@ -447,6 +467,7 @@ tree_node *rb_remove_fixup(tree_node *root, tree_node *node)
                 brother_node = node->parent->right_child; // must be black
 
                 fix_up_case1(node, brother_node);
+                dbg_printf("[Remove] case1 done.\n");
             } // case 1 will definitely turn into case 2
 
             if (brother_node->left_child->color == BLACK &&
@@ -454,8 +475,9 @@ tree_node *rb_remove_fixup(tree_node *root, tree_node *node)
             {
                 brother_node->color = RED;
                 node = move_deleter_up(node);
+                dbg_printf("[Remove] case2 done.\n");
             }
-            
+
             else if (brother_node->right_child->color == BLACK) // case 3
             {
                 brother_node->left_child->color = BLACK;
@@ -464,6 +486,7 @@ tree_node *rb_remove_fixup(tree_node *root, tree_node *node)
                 brother_node = node->parent->right_child;
 
                 fix_up_case3(node, brother_node);
+                dbg_printf("[Remove] case3 done.\n");
             }
 
             else // case 4
@@ -473,8 +496,10 @@ tree_node *rb_remove_fixup(tree_node *root, tree_node *node)
                 brother_node->right_child->color = BLACK;
                 left_rotate(root, node->parent);
 
-                did_move_up = apply_move_up_rule(node, brother_node);
+                other_move_up = apply_move_up_rule(node, brother_node);
                 done = true;
+                node = node->parent;
+                dbg_printf("[Remove] case4 done.\n");
                 break;
             }
         }
@@ -489,6 +514,7 @@ tree_node *rb_remove_fixup(tree_node *root, tree_node *node)
                 brother_node = node->parent->left_child;
 
                 fix_up_case1_r(node, brother_node);
+                dbg_printf("[Remove] case1 done.\n");
             }
 
             if (brother_node->left_child->color == BLACK &&
@@ -496,6 +522,7 @@ tree_node *rb_remove_fixup(tree_node *root, tree_node *node)
             {
                 brother_node->color = RED;
                 node = move_deleter_up(node);
+                dbg_printf("[Remove] case2 done.\n");
             }
 
             else if (brother_node->left_child->color == BLACK) // case 3
@@ -506,6 +533,7 @@ tree_node *rb_remove_fixup(tree_node *root, tree_node *node)
                 brother_node = node->parent->left_child;
 
                 fix_up_case3_r(node, brother_node);
+                dbg_printf("[Remove] case3 done.\n");
             }
 
             else // case 4
@@ -515,14 +543,17 @@ tree_node *rb_remove_fixup(tree_node *root, tree_node *node)
                 brother_node->left_child->color = BLACK;
                 right_rotate(root, node->parent);
 
-                did_move_up = apply_move_up_rule(node, brother_node);
+                other_move_up = apply_move_up_rule(node, brother_node);
                 done = true;
+
+                node = node->parent;
+                dbg_printf("[Remove] case4 done.\n");
                 break;
             }
         }
     }
 
-    if (!did_move_up)
+    if (!other_move_up)
     {
         node->color = BLACK;
         // release flags in local area if did not move up

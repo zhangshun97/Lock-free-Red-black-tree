@@ -7,6 +7,8 @@
  * helper function
  ******************/
 
+pthread_mutex_t show_tree_lock;
+
 /**
  * create a dummy black node, for initialization use
  */
@@ -32,13 +34,15 @@ tree_node *create_dummy_node(void)
  */
 void show_tree(tree_node *root)
 {
-    printf("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+    pthread_mutex_lock(&show_tree_lock);
+    dbg_printf("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
     printf("[root] pointer: 0x%lx flag:%d\n", (unsigned long) root, (int) root->flag);
 
     tree_node *root_node = root->left_child;
     if (root_node->is_leaf)
     {
         printf("Empty Tree.\n");
+        pthread_mutex_unlock(&show_tree_lock);
         return;
     }
     
@@ -87,6 +91,79 @@ void show_tree(tree_node *root)
         }
     }
     printf("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+    pthread_mutex_unlock(&show_tree_lock);
+}
+
+/**
+ * show tree, will check flags and markers, for debug use
+ * only used for debug
+ * because only small tree can be shown
+ */
+void show_tree_strict(tree_node *root)
+{
+    printf("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+    printf("[root] pointer: 0x%lx flag:%d\n", (unsigned long)root, (int)root->flag);
+
+    tree_node *root_node = root->left_child;
+    if (root_node->is_leaf)
+    {
+        printf("Empty Tree.\n");
+        return;
+    }
+
+    std::vector<tree_node *> frontier;
+    frontier.clear();
+    frontier.push_back(root_node);
+
+    while (frontier.size() > 0)
+    {
+        tree_node *cur_node = frontier.back();
+        tree_node *left_child = cur_node->left_child;
+        tree_node *right_child = cur_node->right_child;
+
+        printf("pointer: 0x%lx flag:%d marker: %d\n", (unsigned long)cur_node, (int)cur_node->flag, cur_node->marker);
+        if (cur_node->flag) 
+            printf(">>>>>>> FLAG WARNING <<<<<<<\n");
+        if (cur_node->marker != DEFAULT_MARKER) 
+            printf(">>>>>>> MARKER WARNING <<<<<<<\n");
+
+        if (cur_node->color == BLACK)
+            printf("(%d) Black\n", cur_node->value);
+        else
+            printf("(%d) Red\n", cur_node->value);
+
+        frontier.pop_back();
+        if (left_child->is_leaf)
+        {
+            printf("    left null flag:%d pointer: 0x%lx\n", (int)left_child->flag, (unsigned long)left_child);
+            if (cur_node->flag)
+                printf(">>>>>>> FLAG WARNING <<<<<<<\n");
+        }
+        else
+        {
+            if (left_child->color == BLACK)
+                printf("    (%d) Black\n", left_child->value);
+            else
+                printf("    (%d) Red\n", left_child->value);
+            frontier.push_back(left_child);
+        }
+
+        if (right_child->is_leaf)
+        {
+            printf("    right null flag:%d pointer: 0x%lx\n", (int)right_child->flag, (unsigned long)right_child);
+            if (cur_node->flag)
+                printf(">>>>>>> FLAG WARNING <<<<<<<\n");
+        }
+        else
+        {
+            if (right_child->color == BLACK)
+                printf("    (%d) Black\n", right_child->value);
+            else
+                printf("    (%d) Red\n", right_child->value);
+            frontier.push_back(right_child);
+        }
+    }
+    printf("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
 }
 
 /**
@@ -96,9 +173,8 @@ void show_tree(tree_node *root)
  */
 void show_tree_file(tree_node *root)
 {
-    char *file = "./show_tree.txt";
-    FILE *fd = fopen(file, "w");
-    
+    FILE *fd = fopen("./show_tree.txt", "w");
+
     fprintf(fd, "\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
     fprintf(fd, "[root] pointer: 0x%lx flag:%d\n", (unsigned long)root, (int)root->flag);
 
@@ -393,6 +469,7 @@ tree_node* create_leaf_node(void)
     new_node->right_child = NULL;
     new_node->is_leaf = true;
     new_node->flag = false;
+    new_node->marker = DEFAULT_MARKER;
     return new_node;
 }
 

@@ -4,12 +4,13 @@
 #include <stdio.h>
 #include <pthread.h>
 #include <vector>
+#include <unistd.h>
 #include <atomic>
 
 extern thread_local long lock_index;
 extern bool remove_dbg;
 
-#define DEBUG
+// #define DEBUG
 #ifdef DEBUG
 #define dbg_printf(fmt, ...) \
         do {                 \
@@ -58,11 +59,14 @@ void left_rotate(tree_node *root, tree_node *node);
 void tree_insert(tree_node *root, tree_node *node);
 void rb_insert(tree_node *root, int value);
 void rb_remove(tree_node *root, int value);
-tree_node *rb_remove_fixup(tree_node *root, tree_node *node);
+tree_node *rb_remove_fixup(tree_node *root, 
+                           tree_node *node,
+                           tree_node *z);
 tree_node *tree_search(tree_node *root, int value);
 
 /* utility functions  */
 tree_node *create_dummy_node(void);
+void show_tree_strict(tree_node *root);
 void show_tree_file(tree_node *root);
 void show_tree(tree_node *root);
 bool check_tree(tree_node *root);
@@ -94,6 +98,7 @@ bool setup_local_area_for_insert(tree_node *x);
 tree_node *move_inserter_up(tree_node *oldx, vector<tree_node *> &local_area);
 
 // delete related
+bool is_in_local_area(tree_node *target_node);
 bool setup_local_area_for_delete(tree_node *y, tree_node *z);
 bool apply_move_up_rule(tree_node *x, tree_node *w);
 tree_node *move_deleter_up(tree_node *oldx);
