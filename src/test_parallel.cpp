@@ -23,24 +23,36 @@ int run_multi_thread_remove(int thread_count);
 void *run(void *p);
 void run_serial();
 
-int main()
+int main(int argc, char **argv)
 {
     // test settings
-    int num_processes = 4;
+    int num_processes_i = 1;
+    int num_processes_r = 1;
+    if (argc == 2)
+    {
+        num_processes_i = atoi(argv[1]);
+        num_processes_r = num_processes_i;
+    }
+    else if (argc == 3)
+    {
+        num_processes_i = atoi(argv[1]);
+        num_processes_r = atoi(argv[2]);
+    }
+
     load_data_from_txt();
     printf("total_size: %d\n", total_size);
 
     // init setup
     root = rb_init();
-    move_up_lock_init(num_processes);
-    move_up_list_init(num_processes);
+    move_up_lock_init(num_processes_r);
+    move_up_list_init(num_processes_r);
     pthread_mutex_init(&show_tree_lock, NULL);
 
     // run_serial();
-    run_multi_thread_insert(num_processes);
+    run_multi_thread_insert(num_processes_i);
     // show_tree(root);
     remove_dbg = true;
-    run_multi_thread_remove(num_processes);
+    run_multi_thread_remove(num_processes_r);
 
     return 0;
 }

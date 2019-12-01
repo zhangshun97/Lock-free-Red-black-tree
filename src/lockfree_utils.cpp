@@ -1193,9 +1193,9 @@ tree_node *par_find(tree_node *root, int value)
 {
     bool expect;
 restart:
-    
-    tree_node *root_node = root->left_child;
+    tree_node *root_node;
     do {
+        root_node = root->left_child;
         expect = false;
     } while (!root_node->flag.compare_exchange_weak(expect, true));
     

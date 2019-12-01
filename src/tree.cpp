@@ -382,7 +382,8 @@ restart:
 
     tree_node *z = par_find(root, value);
     tree_node *y; // actual delete node
-    if (z == NULL) return;
+    if (z == NULL)
+        return;
 
     if (z->left_child->is_leaf || z->right_child->is_leaf)
         y = z;
@@ -403,7 +404,6 @@ restart:
         // release flags
         y->flag = false;
         if (y != z) z->flag = false;
-        usleep(100);
         goto restart; // deletion failed, try again
     }
     dbg_printf("[Remove] actual node with value %d\n", y->value);
