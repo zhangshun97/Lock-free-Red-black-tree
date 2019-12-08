@@ -10,7 +10,8 @@
 
 using namespace std;
 
-vector<float> COMP_TIME_LIST = {0, 0.0001, 0.0005, 0.001, 0.005, 0.01};
+vector<float> COMP_TIME_LIST = {0, 0.000001, 0.000005, 0.00001, 0.00005};
+// vector<float> COMP_TIME_LIST = {0, 0.0001, 0.0005, 0.001, 0.005, 0.01};
 
 int total_size = 0, size_per_thread = 0;
 int numbers[1000001];
