@@ -216,7 +216,7 @@ int run_multi_thread_remove(int thread_count)
     double elapsed_time = (end.tv_sec - start.tv_sec) * 1e9;
     elapsed_time += (end.tv_nsec - start.tv_nsec);
     elapsed_time *= 1e-9;
-    cout << "time taken by remove with " << thread_count + 1 << " threads and sleep " << (float)sleep_time / 1000000 << " seconds: " << fixed << elapsed_time << defaultfloat << "sec" << endl;
+    cout << "time taken by remove with " << thread_count + 1 << " threads and sleep " << (float)sleep_time / 1000000 << " seconds: " << fixed << elapsed_time << "sec" << endl;
     cout.unsetf(std::ios_base::floatfield);
 
     // show_tree(root);
