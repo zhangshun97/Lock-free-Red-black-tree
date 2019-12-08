@@ -7,6 +7,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <vector>
+#include <iomanip>
 
 // #define COMPUTATION_TIME_SEC 0.3  // in sec
 // #define COMPUTATION_TIME_USEC COMPUTATION_TIME_SEC * 1000000    // in usec
@@ -106,6 +107,7 @@ void run_serial()
     elapsed_time += (end.tv_nsec - start.tv_nsec);
     elapsed_time *= 1e-9;
     cout << "time taken by insert with 1 threads: " << fixed << elapsed_time << "sec" << endl;
+    cout.unsetf(std::ios_base::floatfield);
 
     remove_dbg = false;
     dbg_printf("\n\n\n");
@@ -121,6 +123,7 @@ void run_serial()
     elapsed_time += (end.tv_nsec - start.tv_nsec);
     elapsed_time *= 1e-9;
     cout << "time taken by delete with 1 threads: " << fixed << elapsed_time << "sec" << endl;
+    cout.unsetf(std::ios_base::floatfield);
 }
 
 void *run_insert(void *i)
@@ -164,7 +167,8 @@ int run_multi_thread_insert(int thread_count)
     double elapsed_time = (end.tv_sec - start.tv_sec) * 1e9;
     elapsed_time += (end.tv_nsec - start.tv_nsec);
     elapsed_time *= 1e-9;
-    cout << "time taken by insert with " << thread_count + 1 << " threads and sleep " << (float)sleep_time / 1000000 << " seconds: " << fixed << elapsed_time << defaultfloat << "sec" << endl;
+    cout << "time taken by insert with " << thread_count + 1 << " threads and sleep " << (float)sleep_time / 1000000 << " seconds: " << fixed << elapsed_time << "sec" << endl;
+    cout.unsetf(std::ios_base::floatfield);
 
     // show_tree(root);
     return 0;
@@ -213,6 +217,7 @@ int run_multi_thread_remove(int thread_count)
     elapsed_time += (end.tv_nsec - start.tv_nsec);
     elapsed_time *= 1e-9;
     cout << "time taken by remove with " << thread_count + 1 << " threads and sleep " << (float)sleep_time / 1000000 << " seconds: " << fixed << elapsed_time << defaultfloat << "sec" << endl;
+    cout.unsetf(std::ios_base::floatfield);
 
     // show_tree(root);
     return 0;
