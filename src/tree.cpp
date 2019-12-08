@@ -496,7 +496,7 @@ tree_node *rb_remove_fixup(tree_node *root,
                 brother_node->right_child->color = BLACK;
                 left_rotate(root, node->parent);
 
-                other_move_up = apply_move_up_rule(node, brother_node);
+                // other_move_up = apply_move_up_rule(node, brother_node);
                 done = true;
                 node = node->parent;
                 dbg_printf("[Remove] case4 done.\n");
@@ -543,7 +543,7 @@ tree_node *rb_remove_fixup(tree_node *root,
                 brother_node->left_child->color = BLACK;
                 right_rotate(root, node->parent);
 
-                other_move_up = apply_move_up_rule(node, brother_node);
+                // other_move_up = apply_move_up_rule(node, brother_node);
                 done = true;
 
                 node = node->parent;
