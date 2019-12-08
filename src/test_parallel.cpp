@@ -143,9 +143,9 @@ void *run_remove(void *i)
     thread_lock_index_init((long)i);
     int *start = p;
     int count = size_per_thread;
-    for (int i = 0; i < count; i++)
+    for (int j = 0; j < count; j++)
     {
-        int element = start[i];
+        int element = start[j];
         rb_remove(root, element);
         dbg_printf("[RUN] finish removing element %d\n", element);
         // show_tree(root);

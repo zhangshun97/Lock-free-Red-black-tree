@@ -1217,6 +1217,7 @@ restart:
         if (!y->flag.compare_exchange_weak(expect, true))
         {
             z->flag = false; // release held flag
+            usleep(100);
             goto restart;
         }
         if (!y->is_leaf)
