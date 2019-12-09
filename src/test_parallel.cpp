@@ -14,8 +14,8 @@
 
 using namespace std;
 
-vector<int> THREADS_NUM_LIST = {1, 2, 4, 8, 16};
-vector<float> COMPUTATION_TIME_LIST = {0, 0.0001, 0.0005, 0.001, 0.005, 0.01};
+vector<int> THREADS_NUM_LIST = {4, 8, 16};
+vector<float> COMPUTATION_TIME_LIST = {0, 0.0001, 0.0005, 0.001};
 vector<vector<double>> test_time_list;
 
 int total_size = 0, size_per_thread = 0;
@@ -62,9 +62,7 @@ int main(int argc, char **argv)
             num_processes_r = num_processes_i = thread_num;
             // init setup
             root = rb_init();
-            move_up_lock_init(num_processes_r);
-            move_up_list_init(num_processes_r);
-            pthread_mutex_init(&show_tree_lock, NULL);
+            pthread_mutex_init(&show_tree_lock, NULL); // for print tree
 
             run_multi_thread_insert(num_processes_i);
 
@@ -77,8 +75,6 @@ int main(int argc, char **argv)
 
     
     // root = rb_init();
-    // move_up_lock_init(num_processes_r);
-    // move_up_list_init(num_processes_r);
     // pthread_mutex_init(&show_tree_lock, NULL);
 
     // run_serial();
@@ -129,7 +125,7 @@ void run_serial()
 void *run_insert(void *i)
 {
     int *p = numbers + ((long)i) * size_per_thread;
-    thread_lock_index_init((long) i);
+    thread_index_init((long) i);
     int *start = p;
     int count = size_per_thread;
     for (int i = 0; i < count; i++)
@@ -177,7 +173,7 @@ int run_multi_thread_insert(int thread_count)
 void *run_remove(void *i)
 {
     int *p = numbers + ((long)i) * size_per_thread;
-    thread_lock_index_init((long)i);
+    thread_index_init((long)i);
     int *start = p;
     int count = size_per_thread;
     for (int j = 0; j < count; j++)
