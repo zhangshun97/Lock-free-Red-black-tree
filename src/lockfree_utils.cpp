@@ -311,6 +311,7 @@ bool setup_local_area_for_delete(tree_node *y, tree_node *z)
         }
     }
 
+    // get four markers above to keep distance with other threads
     if (!get_markers_above(yp, z, true))
     {
         x->flag = false;
@@ -990,10 +991,9 @@ tree_node *move_inserter_up(tree_node *oldx, vector<tree_node *> &local_area)
 tree_node *par_find(tree_node *root, int value)
 {
     bool expect;
-restart:
     tree_node *root_node;
-    do
-    {
+restart:
+    do {
         root_node = root->left_child;
         expect = false;
     } while (!root_node->flag.compare_exchange_weak(expect, true));

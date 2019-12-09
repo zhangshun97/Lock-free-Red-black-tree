@@ -546,27 +546,12 @@ tree_node *rb_remove_fixup(tree_node *root,
 }
 
 /**
- * standard binary tree search
+ * lock-free tree search
  */
 tree_node *tree_search(tree_node *root, int value)
 {
-    tree_node *curr_node = root->left_child;
-    while (!curr_node->is_leaf)
-    {
-        if (curr_node->value == value)
-        {
-            return curr_node;
-        }
-        else if (value < curr_node->value)
-        {
-            curr_node = curr_node->left_child;
-        }
-        else
-        {
-            curr_node = curr_node->right_child;
-        }
-    }
-    
+    tree_node *z = par_find(root, value);
+
     dbg_printf("[Warning] tree serach not found.\n");
-    return curr_node;
+    return z;
 }
