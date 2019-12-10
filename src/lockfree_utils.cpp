@@ -64,49 +64,7 @@ bool spacing_rule_is_satisfied(tree_node *t, tree_node *z,
     // check that t has no marker set
     if (t != z && t->marker != DEFAULT_MARKER && t->marker != PID_to_ignore) 
         return false;
-
-    // check that t’s parent has no flag or marker
-    tree_node *tp = t->parent;
-    if (tp != z)
-    {
-        expect = false;
-        if (!tp->flag.compare_exchange_weak(expect, true))
-        {
-            return false;
-        }
-        if (tp != t->parent) // verify that parent is unchanged
-        {  
-            tp->flag = false;
-            return false;
-        }
-        if (tp->marker != DEFAULT_MARKER && tp->marker != PID_to_ignore)
-        {
-            tp->flag = false;
-            return false;
-        }
-    }
-    // check that t’s sibling has no flag or marker
-    tree_node *ts = tp->left_child;
-    if (is_left(t))
-        ts = tp->right_child;
     
-    expect = false;
-    if (!ts->flag.compare_exchange_weak(expect, true))
-    {
-        if (tp != z)
-            tp->flag = false;
-        return false;
-    }
-    if ((ts->marker != DEFAULT_MARKER) && (ts->marker != PID_to_ignore))
-    {
-        ts->flag = false;
-        if (tp != z)
-            tp->flag = false;
-        return false;
-    }
-    if (tp != z)
-        tp->flag = false;
-    ts->flag = false;
     return true;
 }
 
@@ -704,10 +662,8 @@ void fix_up_case1(tree_node *x, tree_node *w)
     tree_node *oldwrc = oldw->right_child;
 
     // clear markers
-    if (oldw->marker != DEFAULT_MARKER && oldw->marker == oldwlc->marker)
-    {
-        x->parent->marker = oldw->marker;
-    }
+    for (auto node : nodes_own_flag)
+        node->marker = DEFAULT_MARKER;
 
     // set w's marker before releasing its flag
     oldw->marker = thread_index;
@@ -786,10 +742,8 @@ void fix_up_case1_r(tree_node *x, tree_node *w)
     tree_node *oldwrc = x->parent->left_child;
 
     // clear markers
-    if (oldw->marker != DEFAULT_MARKER && oldw->marker == oldwrc->marker)
-    {
-        x->parent->marker = oldw->marker;
-    }
+    for (auto node : nodes_own_flag)
+        node->marker = DEFAULT_MARKER;
 
     // set w's marker before releasing its flag
     oldw->marker = thread_index;
@@ -849,7 +803,7 @@ void fix_up_case3_r(tree_node *x, tree_node *w)
 
 /************************ insert ************************/
 /**
- * TODO: ?
+ * Get flags in local area
  */
 bool setup_local_area_for_insert(tree_node *x)
 {
@@ -904,7 +858,7 @@ bool setup_local_area_for_insert(tree_node *x)
 }
 
 /**
- * TODO: what's local area here?
+ * Move up the target node
  */
 tree_node *move_inserter_up(tree_node *oldx, vector<tree_node *> &local_area)
 {
