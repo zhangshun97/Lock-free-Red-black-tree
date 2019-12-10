@@ -7,6 +7,46 @@
  * helper function
  ******************/
 
+pthread_mutex_t show_tree_lock; // for print the whole tree
+
+/**
+ * create a dummy black node, for initialization use
+ */
+tree_node *create_dummy_node(void)
+{
+    tree_node *node;
+    node = (tree_node *)malloc(sizeof(tree_node));
+    node->color = BLACK;
+    node->value = INT32_MAX;
+    node->left_child = create_leaf_node();
+    node->right_child = create_leaf_node();
+    node->is_leaf = false;
+    node->parent = NULL;
+    node->flag = false;
+    node->marker = DEFAULT_MARKER;
+    return node;
+}
+
+/**
+ * create a red node, for insertion use
+ */
+tree_node *create_node(int value)
+{
+    tree_node *new_node;
+    new_node = (tree_node *)malloc(sizeof(tree_node));
+    new_node->color = RED;
+    new_node->value = value;
+    new_node->left_child = create_leaf_node();
+    new_node->right_child = create_leaf_node();
+    new_node->left_child->parent = new_node;
+    new_node->right_child->parent = new_node;
+    new_node->is_leaf = false;
+    new_node->parent = NULL;
+    new_node->flag = false;
+    new_node->marker = DEFAULT_MARKER;
+    return new_node;
+}
+
 /**
  * show tree
  * only used for debug
@@ -14,7 +54,18 @@
  */
 void show_tree(tree_node *root)
 {
+    pthread_mutex_lock(&show_tree_lock);
+    dbg_printf("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+    printf("[root] pointer: 0x%lx flag:%d\n", (unsigned long) root, (int) root->flag);
+
     tree_node *root_node = root->left_child;
+    if (root_node->is_leaf)
+    {
+        printf("Empty Tree.\n");
+        pthread_mutex_unlock(&show_tree_lock);
+        return;
+    }
+    
     std::vector<tree_node *> frontier;
     frontier.clear();
     frontier.push_back(root_node);
@@ -25,38 +76,182 @@ void show_tree(tree_node *root)
         tree_node *left_child = cur_node->left_child;
         tree_node *right_child = cur_node->right_child;
 
+        printf("pointer: 0x%lx flag:%d marker: %d\n", (unsigned long) cur_node, (int) cur_node->flag, cur_node->marker);
+
         if (cur_node->color == BLACK)
-            dbg_printf("(%d) Black\n", cur_node->value);
+            printf("(%d) Black\n", cur_node->value);
         else
-            dbg_printf("(%d) Red\n", cur_node->value);
+            printf("(%d) Red\n", cur_node->value);
 
         frontier.pop_back();
         if (left_child->is_leaf)
         {
-            dbg_printf("    left null\n");
+            printf("    left null flag:%d pointer: 0x%lx\n", (int)left_child->flag, (unsigned long)left_child);
         }
         else
         {
             if (left_child->color == BLACK)
-                dbg_printf("    (%d) Black\n", left_child->value);
+                printf("    (%d) Black\n", left_child->value);
             else
-                dbg_printf("    (%d) Red\n", left_child->value);
+                printf("    (%d) Red\n", left_child->value);
             frontier.push_back(left_child);
         }
 
         if (right_child->is_leaf)
         {
-            dbg_printf("    right null\n");
+            printf("    right null flag:%d pointer: 0x%lx\n", (int)right_child->flag, (unsigned long)right_child);
         }
         else
         {
             if (right_child->color == BLACK)
-                dbg_printf("    (%d) Black\n", right_child->value);
+                printf("    (%d) Black\n", right_child->value);
             else
-                dbg_printf("    (%d) Red\n", right_child->value);
+                printf("    (%d) Red\n", right_child->value);
             frontier.push_back(right_child);
         }
     }
+    printf("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+    pthread_mutex_unlock(&show_tree_lock);
+}
+
+/**
+ * show tree, will check flags and markers, for debug use
+ * only used for debug
+ * because only small tree can be shown
+ */
+void show_tree_strict(tree_node *root)
+{
+    printf("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+    printf("[root] pointer: 0x%lx flag:%d\n", (unsigned long)root, (int)root->flag);
+
+    tree_node *root_node = root->left_child;
+    if (root_node->is_leaf)
+    {
+        printf("Empty Tree.\n");
+        return;
+    }
+
+    std::vector<tree_node *> frontier;
+    frontier.clear();
+    frontier.push_back(root_node);
+
+    while (frontier.size() > 0)
+    {
+        tree_node *cur_node = frontier.back();
+        tree_node *left_child = cur_node->left_child;
+        tree_node *right_child = cur_node->right_child;
+
+        printf("pointer: 0x%lx flag:%d marker: %d\n", (unsigned long)cur_node, (int)cur_node->flag, cur_node->marker);
+        if (cur_node->flag) 
+            printf(">>>>>>> FLAG WARNING <<<<<<<\n");
+        if (cur_node->marker != DEFAULT_MARKER) 
+            printf(">>>>>>> MARKER WARNING <<<<<<<\n");
+
+        if (cur_node->color == BLACK)
+            printf("(%d) Black\n", cur_node->value);
+        else
+            printf("(%d) Red\n", cur_node->value);
+
+        frontier.pop_back();
+        if (left_child->is_leaf)
+        {
+            printf("    left null flag:%d pointer: 0x%lx\n", (int)left_child->flag, (unsigned long)left_child);
+            if (cur_node->flag)
+                printf(">>>>>>> FLAG WARNING <<<<<<<\n");
+        }
+        else
+        {
+            if (left_child->color == BLACK)
+                printf("    (%d) Black\n", left_child->value);
+            else
+                printf("    (%d) Red\n", left_child->value);
+            frontier.push_back(left_child);
+        }
+
+        if (right_child->is_leaf)
+        {
+            printf("    right null flag:%d pointer: 0x%lx\n", (int)right_child->flag, (unsigned long)right_child);
+            if (cur_node->flag)
+                printf(">>>>>>> FLAG WARNING <<<<<<<\n");
+        }
+        else
+        {
+            if (right_child->color == BLACK)
+                printf("    (%d) Black\n", right_child->value);
+            else
+                printf("    (%d) Red\n", right_child->value);
+            frontier.push_back(right_child);
+        }
+    }
+    printf("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+}
+
+/**
+ * show tree, output in file
+ * only used for debug
+ * because only small tree can be shown
+ */
+void show_tree_file(tree_node *root)
+{
+    FILE *fd = fopen("./show_tree.txt", "w");
+
+    fprintf(fd, "\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+    fprintf(fd, "[root] pointer: 0x%lx flag:%d\n", (unsigned long)root, (int)root->flag);
+
+    tree_node *root_node = root->left_child;
+    if (root_node->is_leaf)
+    {
+        fprintf(fd, "Empty Tree.\n");
+        fclose(fd);
+        return;
+    }
+
+    std::vector<tree_node *> frontier;
+    frontier.clear();
+    frontier.push_back(root_node);
+
+    while (frontier.size() > 0)
+    {
+        tree_node *cur_node = frontier.back();
+        tree_node *left_child = cur_node->left_child;
+        tree_node *right_child = cur_node->right_child;
+
+        fprintf(fd, "pointer: 0x%lx flag:%d marker: %d\n", (unsigned long)cur_node, (int)cur_node->flag, cur_node->marker);
+
+        if (cur_node->color == BLACK)
+            fprintf(fd, "(%d) Black\n", cur_node->value);
+        else
+            fprintf(fd, "(%d) Red\n", cur_node->value);
+
+        frontier.pop_back();
+        if (left_child->is_leaf)
+        {
+            fprintf(fd, "    left null flag:%d pointer: 0x%lx\n", (int)left_child->flag, (unsigned long)left_child);
+        }
+        else
+        {
+            if (left_child->color == BLACK)
+                fprintf(fd, "    (%d) Black\n", left_child->value);
+            else
+                fprintf(fd, "    (%d) Red\n", left_child->value);
+            frontier.push_back(left_child);
+        }
+
+        if (right_child->is_leaf)
+        {
+            fprintf(fd, "    right null flag:%d pointer: 0x%lx\n", (int)right_child->flag, (unsigned long)right_child);
+        }
+        else
+        {
+            if (right_child->color == BLACK)
+                fprintf(fd, "    (%d) Black\n", right_child->value);
+            else
+                fprintf(fd, "    (%d) Red\n", right_child->value);
+            frontier.push_back(right_child);
+        }
+    }
+    fprintf(fd, "\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+    fclose(fd);
 }
 
 /**
@@ -269,9 +464,9 @@ bool check_tree_dfs(tree_node *root)
 /**
  * true if node is the root node, aka has a null parent
  */
-bool is_root(tree_node *node)
+bool is_root(tree_node *root, tree_node *node)
 {
-    if (node->parent == NULL)
+    if (node->parent == root)
     {
         return true;
     }
@@ -293,11 +488,15 @@ tree_node* create_leaf_node(void)
     new_node->left_child = NULL;
     new_node->right_child = NULL;
     new_node->is_leaf = true;
+    new_node->flag = false;
+    new_node->marker = DEFAULT_MARKER;
     return new_node;
 }
 
 /**
- * replace the parent node with its successor
+ * replace the node with its child
+ * this node has at most one non-nil child
+ * return this child after modifying the relation ship
  */
 tree_node *replace_parent(tree_node *root, tree_node *node)
 {
@@ -313,10 +512,11 @@ tree_node *replace_parent(tree_node *root, tree_node *node)
         free_node(node->right_child);
     }
     
-    if (is_root(node))
+    if (is_root(root, node))
     {
-        child->parent = NULL;
+        child->parent = root;
         root->left_child = child;
+        node->parent = NULL;
     }
     
     else if (is_left(node))
@@ -331,6 +531,7 @@ tree_node *replace_parent(tree_node *root, tree_node *node)
         node->parent->right_child = child;
     }
 
+    dbg_printf("[Remove] unlink complete.\n");
     return child;
 }
 
@@ -383,44 +584,6 @@ tree_node *get_uncle(tree_node *node)
     {
         return grand_parent->left_child;
     }
-}
-
-/**
- * get the number of NULL child
- */
-int get_num_null(tree_node *node)
-{
-    int ret = 0;
-
-    if (node->left_child->is_leaf)
-        ret++;
-    if (node->right_child->is_leaf)
-        ret++;
-
-    return ret;
-}
-
-/**
- * get the minimum node within target node's right sub-tree
- * and put its value into the node that will be deleted
- */
-tree_node *get_right_min(tree_node *node)
-{
-    if (node->right_child->is_leaf)
-    {
-        return NULL;
-    }
-
-    tree_node *curr_node = node->right_child;
-    while (!curr_node->left_child->is_leaf)
-    {
-        curr_node = curr_node->left_child;
-    }
-
-    // replace the target node with right min node
-    // only the value
-    node->value = curr_node->value;
-    return curr_node;
 }
 
 /**

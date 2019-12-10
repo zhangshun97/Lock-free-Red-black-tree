@@ -2,3 +2,6 @@
 *.o
 *.log
 test
+.vscode/
+*.txt
+test_parallel
