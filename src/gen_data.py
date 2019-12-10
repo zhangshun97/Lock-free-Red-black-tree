@@ -6,6 +6,5 @@ with open("data.txt", 'w') as f:
     random.shuffle(l)
     for num in l[:total_size]:
         f.write("%d\n" % num)
-        # f.write("\n")
 
 f.close()

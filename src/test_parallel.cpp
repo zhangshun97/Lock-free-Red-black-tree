@@ -15,7 +15,7 @@
 using namespace std;
 
 vector<int> THREADS_NUM_LIST = {1, 2, 4, 8, 16};
-vector<float> COMPUTATION_TIME_LIST = {0, 0.0001, 0.0005, 0.001};
+vector<float> COMPUTATION_TIME_LIST = {0, 0.000001, 0.00001, 0.0001, 0.001};
 vector<vector<double>> test_time_list;
 
 int total_size = 0, size_per_thread = 0;
