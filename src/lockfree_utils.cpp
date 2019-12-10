@@ -59,7 +59,6 @@ bool is_in_local_area(tree_node *target_node)
 bool has_no_others_marker(tree_node *t, tree_node *z,
                                 int TID_to_ignore)
 {
-    bool expect;
     // We hold flags on both t and z.
     // check that t has no marker set
     if (t != z && t->marker != DEFAULT_MARKER && t->marker != TID_to_ignore) 
@@ -590,8 +589,10 @@ void fix_up_case1(tree_node *x, tree_node *w)
     tree_node *oldwrc = oldw->right_child;
 
     // clear markers
-    for (auto node : nodes_own_flag)
-        node->marker = DEFAULT_MARKER;
+    if (oldw->marker != DEFAULT_MARKER && oldw->marker == oldwlc->marker)
+    {
+        x->parent->marker = oldw->marker;
+    }
 
     // set w's marker before releasing its flag
     oldw->marker = thread_index;
@@ -670,8 +671,10 @@ void fix_up_case1_r(tree_node *x, tree_node *w)
     tree_node *oldwrc = x->parent->left_child;
 
     // clear markers
-    for (auto node : nodes_own_flag)
-        node->marker = DEFAULT_MARKER;
+    if (oldw->marker != DEFAULT_MARKER && oldw->marker == oldwrc->marker)
+    {
+        x->parent->marker = oldw->marker;
+    }
 
     // set w's marker before releasing its flag
     oldw->marker = thread_index;
