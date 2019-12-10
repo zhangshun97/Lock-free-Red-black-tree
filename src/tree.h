@@ -7,15 +7,16 @@
 #include <unistd.h>
 #include <atomic>
 
-extern thread_local long lock_index;
-extern bool remove_dbg;
+extern thread_local long thread_index;
+extern bool remove_dbg; // for only debug remove
 
 // #define DEBUG
 #ifdef DEBUG
 #define dbg_printf(fmt, ...) \
         do {                 \
             if (remove_dbg)  \
-                printf("T[%ld] %s line:%d %s():" fmt, lock_index, __FILE__, __LINE__, __func__, ##__VA_ARGS__); \
+                printf("T[%ld] %s line:%d %s():" fmt, thread_index, \
+                __FILE__, __LINE__, __func__, ##__VA_ARGS__); \
         } while(0)
 
 #else
@@ -67,30 +68,26 @@ bool check_tree_dfs(tree_node *root);
 bool is_root(tree_node *root, tree_node *node);
 bool is_left(tree_node *node);
 
-tree_node *get_remove_ndoe(tree_node *node);
 tree_node *create_leaf_node(void);
-void remove_node(tree_node *node);
 tree_node *get_uncle(tree_node *node);
-int get_num_null(tree_node *node);
 tree_node *replace_parent(tree_node *root, tree_node *node);
 
 void free_node(tree_node *node);
-void clear_local_area(void);
 
+/* lock-free related */
+void clear_local_area(void);
+bool is_in_local_area(tree_node *target_node);
 
 // insert related
 bool setup_local_area_for_insert(tree_node *x);
 tree_node *move_inserter_up(tree_node *oldx, vector<tree_node *> &local_area);
 
 // delete related
-bool is_in_local_area(tree_node *target_node);
 bool setup_local_area_for_delete(tree_node *y, tree_node *z);
-bool apply_move_up_rule(tree_node *x, tree_node *w);
 tree_node *move_deleter_up(tree_node *oldx);
 tree_node *par_find(tree_node *root, int value);
 tree_node *par_find_successor(tree_node *delete_node);
 bool release_markers_above(tree_node *start, tree_node *z);
-void clear_self_moveUpStruct(void);
 void fix_up_case1(tree_node *x, tree_node *w);
 void fix_up_case3(tree_node *x, tree_node *w);
 void fix_up_case1_r(tree_node *x, tree_node *w); // mirror case

@@ -52,24 +52,24 @@ bool is_in_local_area(tree_node *target_node)
 }
 
 /**
- * return true if spacing rule is satisfied
+ * return true if the node has no other's marker
  * 
  * z - the node returned by par_find()
  */
-bool spacing_rule_is_satisfied(tree_node *t, tree_node *z,
-                                int PID_to_ignore)
+bool has_no_others_marker(tree_node *t, tree_node *z,
+                                int TID_to_ignore)
 {
     bool expect;
     // We hold flags on both t and z.
     // check that t has no marker set
-    if (t != z && t->marker != DEFAULT_MARKER && t->marker != PID_to_ignore) 
+    if (t != z && t->marker != DEFAULT_MARKER && t->marker != TID_to_ignore) 
         return false;
     
     return true;
 }
 
 /**
- * try to get four markers above
+ * try to get four markers above by getting flags first
  * 
  * @params:
  *      start - parent node of the actual node to be deleted
@@ -90,7 +90,7 @@ bool get_markers_above(tree_node *start, tree_node *z, bool release)
     }
     
     if ((pos1 != start->parent) 
-        || (!spacing_rule_is_satisfied(pos1, z, thread_index)))
+        || (!has_no_others_marker(pos1, z, thread_index)))
     {
         if (pos1 != z) 
             pos1->flag = false;
@@ -110,7 +110,7 @@ bool get_markers_above(tree_node *start, tree_node *z, bool release)
     }
 
     if ((pos2 != pos1->parent) 
-        || (!spacing_rule_is_satisfied(pos2, z, thread_index)))
+        || (!has_no_others_marker(pos2, z, thread_index)))
     {
         if (pos1 != z)
             pos1->flag = false;
@@ -134,7 +134,7 @@ bool get_markers_above(tree_node *start, tree_node *z, bool release)
     }
 
     if ((pos3 != pos2->parent) 
-        || (!spacing_rule_is_satisfied(pos3, z, thread_index)))
+        || (!has_no_others_marker(pos3, z, thread_index)))
     {
         if (pos1 != z)
             pos1->flag = false;
@@ -162,7 +162,7 @@ bool get_markers_above(tree_node *start, tree_node *z, bool release)
     }
     
     if ((pos4 != pos3->parent) 
-        || (!spacing_rule_is_satisfied(pos4, z, thread_index)))
+        || (!has_no_others_marker(pos4, z, thread_index)))
     {
         if (pos1 != z)
             pos1->flag = false;
@@ -305,79 +305,8 @@ bool setup_local_area_for_delete(tree_node *y, tree_node *z)
 }
 
 /**
- * get flags for existing intention markers
- */
-bool get_flags_for_markers(tree_node *start,
-                           tree_node **_pos1, tree_node **_pos2,
-                           tree_node **_pos3, tree_node **_pos4)
-{
-    bool expect;
-    tree_node *pos1, *pos2, *pos3, *pos4;
-
-    pos1 = start->parent;
-    expect = false;
-    if (!pos1->flag.compare_exchange_weak(expect, true))
-        return false;
-    if (pos1 != start->parent) // verify that parent is unchanged
-    {  
-        pos1->flag = false;
-        return false;
-    }
-    pos2 = pos1->parent;
-    expect = false;
-    if (!pos2->flag.compare_exchange_weak(expect, true))
-    {
-        pos1->flag = false;
-        return false;
-    }
-    if (pos2 != pos1->parent) // verify that parent is unchanged
-    {
-        pos1->flag = false;
-        pos2->flag = false;
-        return false;
-    }
-    pos3 = pos2->parent;
-    expect = false;
-    if (!pos3->flag.compare_exchange_weak(expect, true))
-    {
-        pos1->flag = false;
-        pos2->flag = false;
-        return false;
-    }
-    if (pos3 != pos2->parent) // verify that parent is unchanged
-    {
-        pos1->flag = false;
-        pos2->flag = false;
-        pos3->flag = false;
-        return false;
-    }
-    pos4 = pos3->parent;
-    expect = false;
-    if (!pos4->flag.compare_exchange_weak(expect, true))
-    {
-        pos1->flag = false;
-        pos2->flag = false;
-        pos3->flag = false;
-        return false;
-    }
-    if (pos4 != pos3->parent) // verify that parent is unchanged
-    {
-        pos1->flag = false;
-        pos2->flag = false;
-        pos3->flag = false;
-        pos4->flag = false;
-        return false;
-    }
-
-    *_pos1 = pos1;
-    *_pos2 = pos2;
-    *_pos3 = pos3;
-    *_pos4 = pos4;
-    return true;
-}
-
-/**
  * add intention markers (four is sufficient) as needed
+ * and additional one (remove moveUp) or two (insert moveUp) markers
  */
 bool get_flags_and_markers_above(tree_node *start, int numAdditional)
 {
@@ -415,7 +344,7 @@ bool get_flags_and_markers_above(tree_node *start, int numAdditional)
     }
 
     if ((firstnew != pos4->parent) 
-        || (!spacing_rule_is_satisfied(firstnew, start, thread_index)))
+        || (!has_no_others_marker(firstnew, start, thread_index)))
     {
         firstnew->flag = false;
         pos1->flag = false;
@@ -444,7 +373,7 @@ bool get_flags_and_markers_above(tree_node *start, int numAdditional)
         }
 
         if ((secondnew != firstnew->parent) 
-            || (!spacing_rule_is_satisfied(secondnew, start, thread_index)))
+            || (!has_no_others_marker(secondnew, start, thread_index)))
         {
             secondnew->flag = false;
             firstnew->flag = false;
@@ -556,7 +485,7 @@ bool release_markers_above(tree_node *start, tree_node *z)
     dbg_printf("[Marker] release markers %d %d %d %d\n",
                 pos1->value, pos2->value, pos3->value, pos4->value);
     
-    // release flags, TODO: moveUpStruct?
+    // release flags
     pos1->flag = false;
     pos2->flag = false;
     pos3->flag = false;
@@ -573,7 +502,6 @@ tree_node *move_deleter_up(tree_node *oldx)
 {
     bool expect;
 
-    // TODO: check for a moveUpStruct from another process
     // get direct pointers
     tree_node *oldp = oldx->parent;
     tree_node *oldw = oldp->left_child;
@@ -675,7 +603,7 @@ void fix_up_case1(tree_node *x, tree_node *w)
     oldw->parent->parent->parent->parent->marker = DEFAULT_MARKER;
 
     // get the flag of the new wlc & wrc
-    // TODO: this will always be valid because of Spacing Rule
+    // this will always be valid because of markers
     // which means others may hold markers on them, but no flags on them
     w->left_child->flag = true;
     w->right_child->flag = true;
@@ -712,7 +640,7 @@ void fix_up_case3(tree_node *x, tree_node *w)
         node->marker = DEFAULT_MARKER;
 
     // get the flag of the new wlc & wrc
-    // TODO: this will always be valid because of Spacing Rule
+    // this will always be valid because of markers
     // which means others may hold markers on them, but no flags on them
     w->left_child->flag = true;
     oldwrc->flag = false;
@@ -755,7 +683,7 @@ void fix_up_case1_r(tree_node *x, tree_node *w)
     oldw->parent->parent->parent->parent->marker = DEFAULT_MARKER;
 
     // get the flag of the new wlc & wrc
-    // TODO: this will always be valid because of Spacing Rule
+    // this will always be valid because of markers
     // which means others may hold markers on them, but no flags on them
     w->left_child->flag = true;
     w->right_child->flag = true;
@@ -786,7 +714,7 @@ void fix_up_case3_r(tree_node *x, tree_node *w)
         node->marker = DEFAULT_MARKER;
 
     // get the flag of the new wlc & wrc
-    // TODO: this will always be valid because of Spacing Rule
+    // this will always be valid because of markers
     // which means others may hold markers on them, but no flags on them
     w->right_child->flag = true;
     oldwlc->flag = false;
@@ -864,15 +792,6 @@ tree_node *move_inserter_up(tree_node *oldx, vector<tree_node *> &local_area)
 {
     tree_node *oldp = oldx->parent;
     tree_node *oldgp = oldp->parent;
-    // tree_node *uncle = NULL;
-    // if (oldp == oldgp->left_child)
-    // {
-    //     uncle = oldgp->right_child;
-    // }
-    // else
-    // {
-    //     uncle = oldgp->left_child;
-    // }
 
     bool expected = false;
 

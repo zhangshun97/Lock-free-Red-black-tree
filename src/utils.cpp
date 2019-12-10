@@ -7,7 +7,7 @@
  * helper function
  ******************/
 
-pthread_mutex_t show_tree_lock;
+pthread_mutex_t show_tree_lock; // for print the whole tree
 
 /**
  * create a dummy black node, for initialization use
@@ -25,6 +25,26 @@ tree_node *create_dummy_node(void)
     node->flag = false;
     node->marker = DEFAULT_MARKER;
     return node;
+}
+
+/**
+ * create a red node, for insertion use
+ */
+tree_node *create_node(int value)
+{
+    tree_node *new_node;
+    new_node = (tree_node *)malloc(sizeof(tree_node));
+    new_node->color = RED;
+    new_node->value = value;
+    new_node->left_child = create_leaf_node();
+    new_node->right_child = create_leaf_node();
+    new_node->left_child->parent = new_node;
+    new_node->right_child->parent = new_node;
+    new_node->is_leaf = false;
+    new_node->parent = NULL;
+    new_node->flag = false;
+    new_node->marker = DEFAULT_MARKER;
+    return new_node;
 }
 
 /**
@@ -563,74 +583,6 @@ tree_node *get_uncle(tree_node *node)
     else
     {
         return grand_parent->left_child;
-    }
-}
-
-/**
- * get the number of NULL child
- */
-int get_num_null(tree_node *node)
-{
-    int ret = 0;
-
-    if (node->left_child->is_leaf)
-        ret++;
-    if (node->right_child->is_leaf)
-        ret++;
-
-    return ret;
-}
-
-/**
- * get the minimum node within target node's right sub-tree
- * and put its value into the node that will be deleted
- */
-tree_node *get_right_min(tree_node *node)
-{
-    if (node->right_child->is_leaf)
-    {
-        return NULL;
-    }
-
-    tree_node *curr_node = node->right_child;
-    while (!curr_node->left_child->is_leaf)
-    {
-        curr_node = curr_node->left_child;
-    }
-
-    // replace the target node with right min node
-    // only the value
-    node->value = curr_node->value;
-    return curr_node;
-}
-
-/**
- * standard binary search tree remove
- */
-tree_node *get_remove_ndoe(tree_node *node)
-{
-    if (node->is_leaf)
-    {
-        fprintf(stderr, "[ERROR] node not found.\n");
-        return NULL;
-    }
-
-    int case_num = get_num_null(node);
-    if (case_num == 0)
-    {
-        // replace value and remove successor
-        tree_node *right_min_node = get_right_min(node);
-        if (right_min_node->is_leaf)
-            fprintf(stderr, "[ERROR] right min node error.\n");
-
-        // replace the value
-        node->value = right_min_node->value;
-        // remove right min node
-        return get_remove_ndoe(right_min_node);
-    }
-    else
-    {
-        return node;
     }
 }
 

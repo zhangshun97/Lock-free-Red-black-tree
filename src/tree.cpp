@@ -2,7 +2,7 @@
 
 #include <stdlib.h>
 
-extern thread_local long lock_index;
+extern thread_local long thread_index;
 
 /**
  * initialize red-black tree and return its root
@@ -375,7 +375,7 @@ void rb_insert(tree_node *root, int value)
  */
 void rb_remove(tree_node *root, int value)
 {
-    dbg_printf("[Remove] thread %ld value %d\n", lock_index, value);
+    dbg_printf("[Remove] thread %ld value %d\n", thread_index, value);
     // init thread local nodes with flag
     clear_local_area();
 restart:

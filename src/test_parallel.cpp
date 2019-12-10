@@ -14,7 +14,7 @@
 
 using namespace std;
 
-vector<int> THREADS_NUM_LIST = {4, 8, 16};
+vector<int> THREADS_NUM_LIST = {1, 2, 4, 8, 16};
 vector<float> COMPUTATION_TIME_LIST = {0, 0.0001, 0.0005, 0.001};
 vector<vector<double>> test_time_list;
 
