@@ -1,6 +1,18 @@
 # here is our final project pf course 15618@CMU.
-# we are going to implement a lock-free version of red-black tree
+# we have implemented a lock-free version of red-black tree acoording to the following paper
+# Kim J H, Cameron H, Graham P. Lock-free red-black trees using cas
 
+## Summary
+We found that there are many flaws within this paper and the pseudocodes are inconsistent. We believe 
+that's why there are no experiments in the paper (i.e., the authors didn't manage to implement it) and
+why it is hard to implement, especially the MoveUpRule.
+
+However, we managed to implement this algorithm with both insert and remove (linear speedup with multi-threads)
+in branch `spacingAndMoveUp`. What's more, we found that the two rules proposed by the paper is unnecessary
+that we introduced a much simpler marker mechanism in our report, which will avoid the `double marker problem`
+and thus do not need the two rules. The implementation of the simplified version is in branch master.
+
+## Run test demo
 To run tests for lock-free (both insert and remove):
 
     1. go to the root folder of this repository
