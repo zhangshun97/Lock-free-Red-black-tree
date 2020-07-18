@@ -1,6 +1,6 @@
-# here is our final project pf course 15618@CMU.
-# we have implemented a lock-free version of red-black tree acoording to the following paper
-# Kim J H, Cameron H, Graham P. Lock-free red-black trees using cas
+# Final project pf course 15618@CMU.
+We have implemented a lock-free version of red-black tree acoording to the following paper
+> Kim J H, Cameron H, Graham P. Lock-free red-black trees using cas
 
 ## Summary
 We found that there are many flaws within this paper and the pseudocodes are inconsistent. We believe 
@@ -24,7 +24,7 @@ To run tests for lock-free (both insert and remove):
        between every two operations to provide different contention scenario.
 
 Sample stdout:
----------------------------------------------------
+```
 bash-4.2$ ./test_parallel 
 total_size: 100000
 time taken by insert with 1 threads and sleep 0 seconds: 5.456105sec
@@ -81,3 +81,4 @@ time taken by insert with 8 threads and sleep 0.001 seconds: 14.123047sec
 time taken by remove with 8 threads and sleep 0.001 seconds: 14.066496sec
 time taken by insert with 16 threads and sleep 0.001 seconds: 7.071987sec
 time taken by remove with 16 threads and sleep 0.001 seconds: 7.050332sec
+```
