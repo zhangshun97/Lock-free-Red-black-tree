@@ -12,6 +12,8 @@ in branch `spacingAndMoveUp`. What's more, we found that the two rules proposed 
 that we introduced a much simpler marker mechanism in our report, which will avoid the `double marker problem`
 and thus do not need the two rules. The implementation of the simplified version is in branch master.
 
+Also, feel free to read our final report [here](https://github.com/zhangshun97/Lock-free-Red-black-tree/blob/master/final_report.pdf) for implementation details.
+
 ## Run test demo
 To run tests for lock-free (both insert and remove):
 
